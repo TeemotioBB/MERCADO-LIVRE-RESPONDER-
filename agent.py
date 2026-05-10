@@ -8,6 +8,7 @@ import config
 client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
 LOG = []
+BUDGET_MINIMO = 10.0  # nunca reduz abaixo disso
 
 def log(action, message):
     entry = {
@@ -58,25 +59,25 @@ def run_agent():
 
     # Alerta de velocidade
     if velocidade["alerta_velocidade"]:
-        log("ALERTA VELOCIDADE", f"Ritmo atual vai estourar o limite! Projeção fim do dia: R$ {velocidade['projecao_fim_dia']} ({velocidade['percentual_projecao']}% do limite)")
+        log("ALERTA VELOCIDADE", f"Ritmo atual vai estourar o limite! Projeção: R$ {velocidade['projecao_fim_dia']} ({velocidade['percentual_projecao']}%)")
 
-    # Limite 100% atingido — pausa tudo
+    # Limite 100% atingido — reduz todas ao mínimo em vez de pausar
     if pct_used >= 1.0:
-        log("LIMITE ATINGIDO", "100% do limite diário usado. Pausando todas as campanhas.")
+        log("LIMITE ATINGIDO", f"100% do limite diário usado. Reduzindo todas as campanhas para o mínimo de R$ {BUDGET_MINIMO}.")
         for c in campaigns:
             if c.get("status") == "active":
                 try:
-                    ml_client.pause_campaign(c["id"])
-                    log("PAUSADA", f"'{c['name']}' pausada — limite diário atingido.")
-                    memory.add_entry(c["id"], c["name"], "pause", "Limite diário 100% atingido", c.get("metrics", {}))
+                    ml_client.update_campaign_budget(c["id"], BUDGET_MINIMO)
+                    log("BUDGET MÍNIMO", f"'{c['name']}' → R$ {BUDGET_MINIMO} — limite diário atingido.")
+                    memory.add_entry(c["id"], c["name"], f"reduce_budget R${BUDGET_MINIMO}", "Limite diário 100% atingido", c.get("metrics", {}))
                 except Exception as e:
-                    log("ERRO", f"Falha ao pausar '{c['name']}': {str(e)}")
+                    log("ERRO", f"Falha ao reduzir '{c['name']}': {str(e)}")
         return
 
     if pct_used >= config.ALERT_THRESHOLD:
         log("ALERTA", f"{round(pct_used * 100)}% do limite atingido. Agente em modo conservador.")
 
-    # Monta resumo das campanhas com métricas completas
+    # Monta resumo das campanhas
     hora_atual = datetime.now().hour
     periodo = "manhã" if hora_atual < 12 else "tarde" if hora_atual < 18 else "noite"
 
@@ -84,7 +85,7 @@ def run_agent():
     for c in campaigns:
         m = c.get("metrics", {})
 
-        # Busca anúncios individuais da campanha
+        # Busca anúncios individuais
         try:
             ads = ml_client.get_ads_by_campaign(c["id"])
             ads_summary = []
@@ -104,13 +105,16 @@ def run_agent():
         except Exception:
             ads_summary = []
 
+        budget_atual = c.get("budget", BUDGET_MINIMO)
         campaigns_summary.append({
             "id": c["id"],
             "name": c["name"],
             "status": c["status"],
-            "budget": c.get("budget", 0),
+            "budget_atual": budget_atual,
+            "budget_maximo_permitido": round(budget_atual * (1 + config.MAX_BID_INCREASE), 2),
+            "budget_minimo_permitido": max(round(budget_atual * (1 - config.MAX_BID_DECREASE), 2), BUDGET_MINIMO),
             "cost": round(m.get("cost", 0), 2),
-            "percentual_budget_usado": round((m.get("cost", 0) / c.get("budget", 1)) * 100, 1),
+            "percentual_budget_usado": round((m.get("cost", 0) / max(budget_atual, 1)) * 100, 1),
             "clicks": m.get("clicks", 0),
             "prints": m.get("prints", 0),
             "roas": round(m.get("roas", 0), 2),
@@ -118,34 +122,47 @@ def run_agent():
             "ctr": round(m.get("ctr", 0), 4),
             "cvr": round(m.get("cvr", 0), 4),
             "direct_amount": round(m.get("direct_amount", 0), 2),
-            "indirect_amount": round(m.get("indirect_amount", 0), 2),
             "total_amount": round(m.get("total_amount", 0), 2),
             "anuncios": ads_summary
         })
 
-    # Identifica campanha sugadora
-    total_budget = sum(c.get("budget", 0) for c in campaigns)
+    # Calcula % do orçamento total por campanha
+    total_budget = sum(c.get("budget_atual", 0) for c in campaigns_summary)
     for cs in campaigns_summary:
-        cs["percentual_orcamento_total"] = round((cs["budget"] / total_budget * 100) if total_budget > 0 else 0, 1)
+        cs["percentual_orcamento_total"] = round((cs["budget_atual"] / total_budget * 100) if total_budget > 0 else 0, 1)
 
-    # Histórico de decisões anteriores
     historico = memory.format_history_for_prompt()
 
     prompt = f"""
-Você é um especialista sênior em Mercado ADS com 10 anos de experiência otimizando campanhas.
+Você é um especialista sênior em Mercado ADS com 10 anos de experiência.
 Sua missão é maximizar o ROAS geral da conta respeitando rigorosamente os limites financeiros.
 
+FILOSOFIA PRINCIPAL:
+Nunca pause campanhas. Sempre prefira reduzir o budget ao mínimo (R$ {BUDGET_MINIMO}).
+Pausar destrói o histórico de relevância no algoritmo do Mercado Livre.
+Só pause em último caso absoluto: anúncio com ROAS 0 E mais de 50 cliques sem nenhuma conversão.
+
 ═══════════════════════════════════════
-REGRAS ABSOLUTAS — NUNCA VIOLE:
+REGRAS ABSOLUTAS:
 ═══════════════════════════════════════
 - Limite diário total: R$ {config.DAILY_LIMIT}
 - Já gasto hoje: R$ {round(total_spent, 2)} ({round(pct_used * 100)}% do limite)
 - Saldo restante: R$ {round(config.DAILY_LIMIT - total_spent, 2)}
 - ROAS mínimo global: {config.MIN_ROAS}x
-- Aumento máximo de budget por ciclo: {int(config.MAX_BID_INCREASE * 100)}%
-- Redução máxima de budget por ciclo: {int(config.MAX_BID_DECREASE * 100)}%
-- NUNCA sugira budget individual maior que R$ {config.DAILY_LIMIT}
-- Se projeção de gasto ultrapassa o limite, seja conservador
+- Aumento máximo por ciclo: {int(config.MAX_BID_INCREASE * 100)}%
+- Redução máxima por ciclo: {int(config.MAX_BID_DECREASE * 100)}%
+- Budget mínimo absoluto: R$ {BUDGET_MINIMO}
+- NUNCA sugira budget acima de R$ {config.DAILY_LIMIT}
+
+═══════════════════════════════════════
+LÓGICA DE DECISÃO POR ROAS:
+═══════════════════════════════════════
+- ROAS 0 com 50+ cliques sem conversão → única exceção para pausar
+- ROAS abaixo de {config.MIN_ROAS}x → reduzir budget ao mínimo (R$ {BUDGET_MINIMO})
+- ROAS entre {config.MIN_ROAS}x e 2.0x → reduzir budget 20%
+- ROAS entre 2.0x e 3.5x → manter budget atual
+- ROAS entre 3.5x e 5.0x → aumentar budget 10%
+- ROAS acima de 5.0x → aumentar budget 15%
 
 ═══════════════════════════════════════
 SITUAÇÃO ATUAL:
@@ -153,7 +170,7 @@ SITUAÇÃO ATUAL:
 - Horário: {datetime.now().strftime("%H:%M")} ({periodo})
 - Gasto por hora: R$ {velocidade['gasto_por_hora']}
 - Projeção fim do dia: R$ {velocidade['projecao_fim_dia']} ({velocidade['percentual_projecao']}% do limite)
-- Alerta de velocidade: {"SIM — ritmo atual vai estourar o limite!" if velocidade['alerta_velocidade'] else "Não"}
+- Alerta de velocidade: {"SIM — reduzir budgets imediatamente!" if velocidade['alerta_velocidade'] else "Não"}
 
 ═══════════════════════════════════════
 HISTÓRICO DE DECISÕES ANTERIORES:
@@ -168,28 +185,29 @@ CAMPANHAS E ANÚNCIOS AGORA:
 ═══════════════════════════════════════
 INSTRUÇÕES DE ANÁLISE:
 ═══════════════════════════════════════
-1. VELOCIDADE: Se a projeção ultrapassa o limite, reduza budgets antes de qualquer outra ação.
-2. ROAS + CTR: Analise os dois juntos. CTR baixo = invisível. ROAS baixo = prejuízo.
-3. SUGADORES: Campanha que consome muito % do orçamento total com ROAS mediano está sugando verba de campanhas melhores. Redistribua.
-4. NÍVEL DE ANÚNCIO: Se uma campanha é boa mas tem anúncios ruins dentro, pause só os anúncios ruins.
-5. HISTÓRICO: Use as decisões anteriores para aprender. Se uma ação funcionou, considere repetir. Se não funcionou, não repita.
-6. HORÁRIO: Considere que é {periodo}. Ajuste a agressividade dos lances conforme o período.
+1. VELOCIDADE: Se projeção ultrapassa o limite, reduza budgets antes de qualquer outra ação.
+2. ROAS + CTR: Analise os dois juntos. CTR baixo = invisível no ML. ROAS baixo = prejuízo.
+3. SUGADORES: Campanha consumindo muito % do orçamento com ROAS mediano prejudica as melhores. Redistribua reduzindo a sugadora e aumentando a melhor.
+4. ANÚNCIOS INDIVIDUAIS: Se campanha é boa mas tem anúncios ruins dentro, pause SÓ os anúncios ruins — não a campanha.
+5. HISTÓRICO: Se uma ação funcionou antes, considere repetir. Se não funcionou, não repita.
+6. HORÁRIO: É {periodo}. De madrugada seja conservador. No horário de pico seja mais agressivo.
+7. REDISTRIBUIÇÃO: O saldo economizado reduzindo campanhas ruins deve ser direcionado para as melhores.
 
-Responda APENAS com JSON válido, sem texto adicional:
+Responda APENAS com JSON válido, sem texto adicional, sem markdown:
 {{
   "actions": [
     {{
       "campaign_id": 123,
       "campaign_name": "Nome",
-      "action": "pause" | "activate" | "reduce_budget" | "increase_budget" | "keep",
+      "action": "reduce_budget" | "increase_budget" | "keep" | "pause",
       "new_budget": 50.0,
       "reason": "Motivo detalhado em português",
-      "ads_to_pause": [456, 789],
+      "ads_to_pause": [],
       "ads_to_activate": []
     }}
   ],
   "summary": "Resumo geral da análise e estratégia adotada neste ciclo",
-  "alerta": "Algum alerta importante ou vazio se não houver"
+  "alerta": "Alerta importante ou string vazia se não houver"
 }}
 """
 
@@ -200,8 +218,7 @@ Responda APENAS com JSON válido, sem texto adicional:
             messages=[{"role": "user", "content": prompt}]
         )
         raw = response.content[0].text.strip()
-        # Remove markdown se vier
-        if raw.startswith("```"):
+        if "```" in raw:
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
@@ -225,7 +242,6 @@ Responda APENAS com JSON válido, sem texto adicional:
         ads_to_pause = action.get("ads_to_pause", [])
         ads_to_activate = action.get("ads_to_activate", [])
 
-        # Busca métricas atuais da campanha pra salvar no histórico
         metrics_now = next(
             (c.get("metrics", {}) for c in campaigns if c["id"] == campaign_id),
             {}
@@ -233,38 +249,37 @@ Responda APENAS com JSON válido, sem texto adicional:
 
         try:
             if act == "pause":
+                # Só executa pause em último caso absoluto
                 ml_client.pause_campaign(campaign_id)
                 log("PAUSADA", f"'{name}' — {reason}")
                 memory.add_entry(campaign_id, name, "pause", reason, metrics_now)
 
-            elif act == "activate":
-                ml_client.activate_campaign(campaign_id)
-                log("ATIVADA", f"'{name}' — {reason}")
-                memory.add_entry(campaign_id, name, "activate", reason, metrics_now)
-
             elif act in ("reduce_budget", "increase_budget") and new_budget:
-                ml_client.update_campaign_budget(campaign_id, new_budget)
-                log(act.upper(), f"'{name}' → R$ {new_budget} — {reason}")
-                memory.add_entry(campaign_id, name, f"{act} R${new_budget}", reason, metrics_now)
+                # Garante que nunca vai abaixo do mínimo nem acima do limite
+                safe_budget = max(min(new_budget, config.DAILY_LIMIT), BUDGET_MINIMO)
+                ml_client.update_campaign_budget(campaign_id, safe_budget)
+                emoji = "📉" if act == "reduce_budget" else "📈"
+                log(act.upper(), f"{emoji} '{name}' → R$ {safe_budget} — {reason}")
+                memory.add_entry(campaign_id, name, f"{act} R${safe_budget}", reason, metrics_now)
 
             else:
                 log("MANTIDA", f"'{name}' — {reason}")
 
-            # Pausa anúncios individuais ruins
+            # Anúncios individuais ruins — reduz ao mínimo em vez de pausar
             for ad_id in ads_to_pause:
                 try:
-                    ml_client.pause_campaign(ad_id)
-                    log("ANÚNCIO PAUSADO", f"Anúncio {ad_id} dentro de '{name}'")
+                    ml_client.update_campaign_budget(ad_id, BUDGET_MINIMO)
+                    log("ANÚNCIO REDUZIDO", f"Anúncio {ad_id} dentro de '{name}' → R$ {BUDGET_MINIMO}")
                 except Exception as e:
-                    log("ERRO", f"Falha ao pausar anúncio {ad_id}: {str(e)}")
+                    log("ERRO", f"Falha ao reduzir anúncio {ad_id}: {str(e)}")
 
-            # Ativa anúncios individuais
+            # Reativa anúncios que melhoraram
             for ad_id in ads_to_activate:
                 try:
                     ml_client.activate_campaign(ad_id)
-                    log("ANÚNCIO ATIVADO", f"Anúncio {ad_id} dentro de '{name}'")
+                    log("ANÚNCIO REATIVADO", f"Anúncio {ad_id} dentro de '{name}'")
                 except Exception as e:
-                    log("ERRO", f"Falha ao ativar anúncio {ad_id}: {str(e)}")
+                    log("ERRO", f"Falha ao reativar anúncio {ad_id}: {str(e)}")
 
         except Exception as e:
             log("ERRO", f"Falha ao executar ação em '{name}': {str(e)}")
