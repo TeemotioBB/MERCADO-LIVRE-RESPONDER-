@@ -488,12 +488,12 @@ let pollInterval = null;
 function startPolling() {
   refreshAll();
   pollInterval = setInterval(() => {
-    refreshStatus();
-    refreshLog();
-    refreshPace();
-    if (currentTab === 'pending') refreshPending();
-    if (currentTab === 'campaigns') refreshCampaigns();
-    if (currentTab === 'history') refreshHistory();
+    try { refreshStatus(); } catch(e) {}
+    try { refreshLog(); } catch(e) {}
+    try { refreshPace(); } catch(e) {}
+    if (currentTab === 'pending') try { refreshPending(); } catch(e) {}
+    if (currentTab === 'campaigns') try { refreshCampaigns(); } catch(e) {}
+    if (currentTab === 'history') try { refreshHistory(); } catch(e) {}
   }, 15000);
 }
 
@@ -514,8 +514,16 @@ async function apiFetch(path, options = {}) {
 
 // ─── REFRESH ─────────────────────────────────────────────────────────────
 async function refreshAll() {
-  await Promise.all([refreshStatus(), refreshCampaigns(), refreshPending(), refreshLog(), refreshPace()]);
-  renderTab(currentTab);
+  try {
+    await Promise.all([
+      refreshStatus().catch(()=>{}),
+      refreshCampaigns().catch(()=>{}),
+      refreshPending().catch(()=>{}),
+      refreshLog().catch(()=>{}),
+      refreshPace().catch(()=>{})
+    ]);
+  } catch(e) {}
+  try { renderTab(currentTab); } catch(e) {}
 }
 
 async function refreshPace() {
@@ -544,6 +552,7 @@ async function refreshPace() {
 }
 
 
+async function refreshStatus() {
   const data = await apiFetch('/api/status');
   if (!data || data.erro) return;
   statusData = data;
@@ -1056,8 +1065,8 @@ window.addEventListener('load', async () => {
   setInterval(updateTime, 1000);
   updateTime();
   initChart();
-  await loadMode();
-  startPolling();
+  try { await loadMode(); } catch(e) { console.warn('loadMode failed', e); }
+  try { startPolling(); } catch(e) { console.warn('startPolling failed', e); }
 });
 </script>
 </body>
