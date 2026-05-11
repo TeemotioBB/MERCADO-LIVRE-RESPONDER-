@@ -45,6 +45,54 @@ def calcular_velocidade_gasto(total_spent):
     }
 
 
+def verificar_pace(campaigns, total_spent):
+    """
+    Verifica o ritmo de gasto SEM chamar a IA — pura matemática.
+    Retorna lista de alertas de pace por campanha.
+    Horário comercial: 08h–22h (14 horas úteis).
+    """
+    agora = datetime.now()
+    hora = agora.hour + agora.minute / 60
+
+    # Fora do horário comercial: não alerta
+    if hora < 8 or hora > 22:
+        return []
+
+    # Quantas horas do horário comercial já passaram
+    horas_comerciais_passadas = max(hora - 8, 0.5)
+    horas_comerciais_totais = 14.0  # 08h às 22h
+    frac_dia_passada = horas_comerciais_passadas / horas_comerciais_totais
+
+    alertas = []
+    for c in campaigns:
+        if c.get("status") != "active":
+            continue
+
+        budget = c.get("budget", 0)
+        if budget <= 0:
+            continue
+
+        cost = c.get("metrics", {}).get("cost", 0)
+        meta_ate_agora = budget * frac_dia_passada
+        deficit = meta_ate_agora - cost
+        deficit_pct = (deficit / meta_ate_agora * 100) if meta_ate_agora > 0 else 0
+
+        # Alerta só se estiver mais de 40% abaixo do ritmo esperado
+        if deficit_pct > 40:
+            aumento_sugerido = round(min(deficit_pct / 100 * 30, 50))  # sugere até +50%
+            alertas.append({
+                "campaign_id": c["id"],
+                "name": c.get("name", ""),
+                "budget": round(budget, 2),
+                "gasto_hoje": round(cost, 2),
+                "meta_ate_agora": round(meta_ate_agora, 2),
+                "deficit_pct": round(deficit_pct, 1),
+                "aumento_lance_sugerido": aumento_sugerido,
+            })
+
+    return alertas
+
+
 def run_agent():
     log("INÍCIO", f"Agente iniciado. Limite diário: R$ {config.DAILY_LIMIT}")
     mode = get_ai_mode()
@@ -75,6 +123,16 @@ def run_agent():
     velocidade = calcular_velocidade_gasto(total_spent)
 
     log("DADOS", f"Gasto hoje: R$ {round(total_spent, 2)} ({round(pct_used * 100)}% do limite)")
+
+    # ── PACE CHECK (sem IA, custo zero) ──────────────────────────────────
+    alertas_pace = verificar_pace(campaigns, total_spent)
+    for alerta in alertas_pace:
+        log("⚠️ RITMO BAIXO",
+            f"'{alerta['name']}' gastou R${alerta['gasto_hoje']} de R${alerta['meta_ate_agora']} esperados "
+            f"({alerta['deficit_pct']}% abaixo do ritmo). "
+            f"👉 Aumente o lance ~{alerta['aumento_lance_sugerido']}% no Mercado Livre ADS."
+        )
+    # ─────────────────────────────────────────────────────────────────────
 
     if velocidade["alerta_velocidade"]:
         log("ALERTA VELOCIDADE", f"Ritmo atual vai estourar o limite! Projeção: R$ {velocidade['projecao_fim_dia']} ({velocidade['percentual_projecao']}%)")
@@ -181,8 +239,8 @@ Responda APENAS JSON valido:
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4000,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1500,
             messages=[{"role": "user", "content": prompt}]
         )
         raw = response.content[0].text.strip()
