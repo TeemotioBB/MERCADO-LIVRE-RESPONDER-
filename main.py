@@ -1,40 +1,15 @@
-from flask import Flask, jsonify
+import os
+import requests as http_requests
+from flask import Flask, jsonify, request
 import scheduler
 import agent
 import config
 
-import requests as http_requests
-import os
-
-@app.route("/oauth/callback")
-def oauth_callback():
-    from flask import request
-    code = request.args.get("code")
-    if not code:
-        return jsonify({"erro": "code não encontrado"}), 400
-
-    resp = http_requests.post("https://api.mercadolibre.com/oauth/token", data={
-        "grant_type": "authorization_code",
-        "client_id": os.getenv("ML_APP_ID"),
-        "client_secret": os.getenv("ML_CLIENT_SECRET"),
-        "code": code,
-        "redirect_uri": os.getenv("ML_REDIRECT_URI")
-    })
-    data = resp.json()
-    return jsonify({
-        "access_token": data.get("access_token"),
-        "user_id": data.get("user_id"),
-        "expires_in": data.get("expires_in")
-    })
-
 app = Flask(__name__)
+
 
 @app.route("/")
 def index():
-    total_spent = sum(
-        c.get("metrics", {}).get("cost", 0)
-        for c in []
-    )
     return jsonify({
         "status": "Agente ML ADS rodando",
         "limite_diario": config.DAILY_LIMIT,
@@ -43,14 +18,17 @@ def index():
         "intervalo_minutos": config.AGENT_INTERVAL_MINUTES
     })
 
+
 @app.route("/log")
 def log():
     return jsonify(agent.get_log())
+
 
 @app.route("/rodar-agora")
 def rodar_agora():
     agent.run_agent()
     return jsonify({"status": "Agente executado com sucesso", "log": agent.get_log()})
+
 
 @app.route("/status")
 def status():
@@ -67,6 +45,36 @@ def status():
         })
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
+
+@app.route("/oauth/callback")
+def oauth_callback():
+    code = request.args.get("code")
+    if not code:
+        return jsonify({"erro": "code não encontrado na URL"}), 400
+
+    resp = http_requests.post("https://api.mercadolibre.com/oauth/token", data={
+        "grant_type": "authorization_code",
+        "client_id": os.getenv("ML_APP_ID"),
+        "client_secret": os.getenv("ML_CLIENT_SECRET"),
+        "code": code,
+        "redirect_uri": os.getenv("ML_REDIRECT_URI")
+    })
+    data = resp.json()
+
+    access_token = data.get("access_token")
+    user_id = data.get("user_id")
+
+    if not access_token:
+        return jsonify({"erro": "Falha ao obter token", "detalhes": data}), 400
+
+    return jsonify({
+        "✅ ML_ACCESS_TOKEN": access_token,
+        "✅ ML_ADVERTISER_ID": user_id,
+        "expires_in_segundos": data.get("expires_in"),
+        "instrucao": "Copie os dois valores acima e cole nas variáveis do Railway"
+    })
+
 
 if __name__ == "__main__":
     scheduler.start()
