@@ -59,25 +59,23 @@ def debug_ads():
         "Content-Type": "application/json"
     }
 
-    from datetime import date
-    hoje = date.today().isoformat()
     resultados = {}
 
-    # Tenta descobrir o advertiser_id correto
-    urls_tentadas = [
-        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers/{user_id}",
-        f"https://api.mercadolibre.com/advertising/advertisers?user_id={user_id}",
-        f"https://api.mercadolibre.com/users/{user_id}/advertising",
-        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers?user_id={user_id}",
-    ]
+    # Verifica quais scopes o token tem
+    r1 = http_requests.get(
+        f"https://api.mercadolibre.com/oauth/me?access_token={token}"
+    )
+    resultados["1_token_info"] = r1.json()
 
-    for i, url in enumerate(urls_tentadas):
-        r = http_requests.get(url, headers=headers)
-        resultados[f"tentativa_{i+1}"] = {
-            "url": url,
-            "status": r.status_code,
-            "resposta": r.json()
-        }
+    # Tenta endpoint de campanhas com scope explícito
+    from datetime import date
+    hoje = date.today().isoformat()
+    r2 = http_requests.get(
+        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers/{user_id}/product_ads/campaigns/search",
+        headers=headers,
+        params={"date_from": hoje, "date_to": hoje, "limit": 5}
+    )
+    resultados["2_campanhas"] = {"status": r2.status_code, "resposta": r2.json()}
 
     return jsonify(resultados)
 
@@ -107,6 +105,7 @@ def oauth_callback():
         "✅ ML_ACCESS_TOKEN": access_token,
         "✅ ML_ADVERTISER_ID": user_id,
         "expires_in_segundos": data.get("expires_in"),
+        "scopes": data.get("scope"),
         "instrucao": "Copie os dois valores acima e cole nas variáveis do Railway"
     })
 
