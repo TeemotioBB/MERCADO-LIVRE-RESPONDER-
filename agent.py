@@ -1,5 +1,6 @@
 import anthropic
 import json
+import uuid
 from datetime import datetime
 import ml_client
 import memory
@@ -8,7 +9,12 @@ import config
 client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
 LOG = []
-BUDGET_MINIMO = 10.0  # nunca reduz abaixo disso
+BUDGET_MINIMO = 10.0
+
+# Funções injetadas pelo main.py para desacoplar o ciclo
+get_ai_mode = lambda: "auto"          # substituído em main.py
+add_pending = lambda action: None     # substituído em main.py
+
 
 def log(action, message):
     entry = {
@@ -19,8 +25,10 @@ def log(action, message):
     LOG.append(entry)
     print(f"[{entry['time']}] {action}: {message}")
 
+
 def get_log():
     return LOG
+
 
 def calcular_velocidade_gasto(total_spent):
     hora_atual = datetime.now().hour + datetime.now().minute / 60
@@ -36,10 +44,12 @@ def calcular_velocidade_gasto(total_spent):
         "alerta_velocidade": percentual_projecao > 1.1
     }
 
+
 def run_agent():
     log("INÍCIO", f"Agente iniciado. Limite diário: R$ {config.DAILY_LIMIT}")
+    mode = get_ai_mode()
+    log("MODO", f"Modo atual: {mode}")
 
-    # Coleta campanhas
     try:
         campaigns = ml_client.get_campaigns()
     except Exception as e:
@@ -50,18 +60,15 @@ def run_agent():
         log("AVISO", "Nenhuma campanha encontrada.")
         return
 
-    # Métricas gerais
     total_spent = sum(c.get("metrics", {}).get("cost", 0) for c in campaigns)
     pct_used = total_spent / config.DAILY_LIMIT if config.DAILY_LIMIT > 0 else 0
     velocidade = calcular_velocidade_gasto(total_spent)
 
     log("DADOS", f"Gasto hoje: R$ {round(total_spent, 2)} ({round(pct_used * 100)}% do limite)")
 
-    # Alerta de velocidade
     if velocidade["alerta_velocidade"]:
         log("ALERTA VELOCIDADE", f"Ritmo atual vai estourar o limite! Projeção: R$ {velocidade['projecao_fim_dia']} ({velocidade['percentual_projecao']}%)")
 
-    # Limite 100% atingido — reduz todas ao mínimo em vez de pausar
     if pct_used >= 1.0:
         log("LIMITE ATINGIDO", f"100% do limite diário usado. Reduzindo todas as campanhas para o mínimo de R$ {BUDGET_MINIMO}.")
         for c in campaigns:
@@ -77,15 +84,12 @@ def run_agent():
     if pct_used >= config.ALERT_THRESHOLD:
         log("ALERTA", f"{round(pct_used * 100)}% do limite atingido. Agente em modo conservador.")
 
-    # Monta resumo das campanhas
     hora_atual = datetime.now().hour
     periodo = "manhã" if hora_atual < 12 else "tarde" if hora_atual < 18 else "noite"
 
     campaigns_summary = []
     for c in campaigns:
         m = c.get("metrics", {})
-
-        # Busca anúncios individuais
         try:
             ads = ml_client.get_ads_by_campaign(c["id"])
             ads_summary = []
@@ -126,7 +130,6 @@ def run_agent():
             "anuncios": ads_summary
         })
 
-    # Calcula % do orçamento total por campanha
     total_budget = sum(c.get("budget_atual", 0) for c in campaigns_summary)
     for cs in campaigns_summary:
         cs["percentual_orcamento_total"] = round((cs["budget_atual"] / total_budget * 100) if total_budget > 0 else 0, 1)
@@ -232,7 +235,40 @@ Responda APENAS com JSON válido, sem texto adicional, sem markdown:
     if decisions.get("alerta"):
         log("ALERTA IA", decisions["alerta"])
 
-    # Executa as decisões
+    # Em modo MANUAL: apenas registra as sugestões no log, não executa nada
+    if mode == "manual":
+        for action in decisions.get("actions", []):
+            log("SUGESTÃO", f"'{action['campaign_name']}': {action['action']} → R$ {action.get('new_budget', '?')} | {action.get('reason', '')}")
+        log("FIM", "Ciclo concluído (modo manual — apenas sugestões, nada executado).")
+        return
+
+    # Em modo SEMI (supervisionado): enfileira pendências em vez de executar
+    if mode == "semi":
+        for action in decisions.get("actions", []):
+            if action["action"] == "keep":
+                log("MANTIDA", f"'{action['campaign_name']}' — {action.get('reason', '')}")
+                continue
+            pending_item = {
+                "id": str(uuid.uuid4())[:8],
+                "campaignId": action["campaign_id"],
+                "name": action["campaign_name"],
+                "action": action["action"],
+                "currentBudget": next(
+                    (c["budget_atual"] for c in campaigns_summary if c["id"] == action["campaign_id"]), 0
+                ),
+                "newBudget": action.get("new_budget"),
+                "reason": action.get("reason", ""),
+                "roas": next(
+                    (c["roas"] for c in campaigns_summary if c["id"] == action["campaign_id"]), 0
+                ),
+                "urgency": _calc_urgency(action),
+            }
+            add_pending(pending_item)
+            log("PENDENTE", f"'{action['campaign_name']}': {action['action']} aguarda aprovação do usuário")
+        log("FIM", f"Ciclo concluído (modo supervisionado — {len([a for a in decisions.get('actions',[]) if a['action']!='keep'])} ações aguardam aprovação).")
+        return
+
+    # Modo AUTO: executa imediatamente
     for action in decisions.get("actions", []):
         campaign_id = action["campaign_id"]
         name = action["campaign_name"]
@@ -243,19 +279,16 @@ Responda APENAS com JSON válido, sem texto adicional, sem markdown:
         ads_to_activate = action.get("ads_to_activate", [])
 
         metrics_now = next(
-            (c.get("metrics", {}) for c in campaigns if c["id"] == campaign_id),
-            {}
+            (c.get("metrics", {}) for c in campaigns if c["id"] == campaign_id), {}
         )
 
         try:
             if act == "pause":
-                # Só executa pause em último caso absoluto
                 ml_client.pause_campaign(campaign_id)
                 log("PAUSADA", f"'{name}' — {reason}")
                 memory.add_entry(campaign_id, name, "pause", reason, metrics_now)
 
             elif act in ("reduce_budget", "increase_budget") and new_budget:
-                # Garante que nunca vai abaixo do mínimo nem acima do limite
                 safe_budget = max(min(new_budget, config.DAILY_LIMIT), BUDGET_MINIMO)
                 ml_client.update_campaign_budget(campaign_id, safe_budget)
                 emoji = "📉" if act == "reduce_budget" else "📈"
@@ -265,7 +298,6 @@ Responda APENAS com JSON válido, sem texto adicional, sem markdown:
             else:
                 log("MANTIDA", f"'{name}' — {reason}")
 
-            # Anúncios individuais ruins — reduz ao mínimo em vez de pausar
             for ad_id in ads_to_pause:
                 try:
                     ml_client.update_campaign_budget(ad_id, BUDGET_MINIMO)
@@ -273,7 +305,6 @@ Responda APENAS com JSON válido, sem texto adicional, sem markdown:
                 except Exception as e:
                     log("ERRO", f"Falha ao reduzir anúncio {ad_id}: {str(e)}")
 
-            # Reativa anúncios que melhoraram
             for ad_id in ads_to_activate:
                 try:
                     ml_client.activate_campaign(ad_id)
@@ -285,3 +316,12 @@ Responda APENAS com JSON válido, sem texto adicional, sem markdown:
             log("ERRO", f"Falha ao executar ação em '{name}': {str(e)}")
 
     log("FIM", "Ciclo concluído.")
+
+
+def _calc_urgency(action):
+    roas = action.get("roas", 0) if isinstance(action, dict) else 0
+    if action.get("action") in ("reduce_budget", "pause") and isinstance(roas, (int, float)) and roas < 1:
+        return "critical"
+    if action.get("action") == "increase_budget":
+        return "high"
+    return "medium"
