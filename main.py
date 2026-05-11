@@ -1,6 +1,7 @@
 import os
+import urllib.parse
 import requests as http_requests
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect
 import scheduler
 import agent
 import config
@@ -61,13 +62,14 @@ def debug_ads():
 
     resultados = {}
 
-    # Verifica quais scopes o token tem
+    # ✅ Endpoint correto para verificar o token e seus scopes
     r1 = http_requests.get(
-        f"https://api.mercadolibre.com/oauth/me?access_token={token}"
+        "https://api.mercadolibre.com/users/me",
+        headers={"Authorization": f"Bearer {token}"}
     )
     resultados["1_token_info"] = r1.json()
 
-    # Tenta endpoint de campanhas com scope explícito
+    # Tenta endpoint de campanhas
     from datetime import date
     hoje = date.today().isoformat()
     r2 = http_requests.get(
@@ -78,6 +80,19 @@ def debug_ads():
     resultados["2_campanhas"] = {"status": r2.status_code, "resposta": r2.json()}
 
     return jsonify(resultados)
+
+
+# ✅ Nova rota: gera o link de autorização com os scopes de publicidade
+@app.route("/oauth/authorize")
+def oauth_authorize():
+    params = urllib.parse.urlencode({
+        "response_type": "code",
+        "client_id": os.getenv("ML_APP_ID"),
+        "redirect_uri": os.getenv("ML_REDIRECT_URI"),
+        "scope": "read_advertising write_advertising offline_access"
+    })
+    url = f"https://auth.mercadolibre.com.br/authorization?{params}"
+    return redirect(url)
 
 
 @app.route("/oauth/callback")
