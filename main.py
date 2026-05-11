@@ -47,6 +47,42 @@ def status():
         return jsonify({"erro": str(e)}), 500
 
 
+@app.route("/debug-ads")
+def debug_ads():
+    token = config.ML_ACCESS_TOKEN
+    advertiser_id = config.ML_ADVERTISER_ID
+    site_id = config.ML_SITE_ID
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    resultados = {}
+
+    # Teste 1: token válido
+    r1 = http_requests.get("https://api.mercadolibre.com/users/me", headers=headers)
+    resultados["1_usuario"] = r1.json()
+
+    # Teste 2: busca advertiser ID correto
+    r2 = http_requests.get(
+        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers",
+        headers=headers
+    )
+    resultados["2_advertisers"] = r2.json()
+
+    # Teste 3: campanhas com advertiser_id atual
+    from datetime import date
+    hoje = date.today().isoformat()
+    r3 = http_requests.get(
+        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search",
+        headers=headers,
+        params={"date_from": hoje, "date_to": hoje, "limit": 5}
+    )
+    resultados["3_campanhas"] = r3.json()
+
+    return jsonify(resultados)
+
+
 @app.route("/oauth/callback")
 def oauth_callback():
     code = request.args.get("code")
