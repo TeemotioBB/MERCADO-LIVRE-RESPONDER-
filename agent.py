@@ -136,83 +136,32 @@ def run_agent():
 
     historico = memory.format_history_for_prompt()
 
-    prompt = f"""
-Você é um especialista sênior em Mercado ADS com 10 anos de experiência.
-Sua missão é maximizar o ROAS geral da conta respeitando rigorosamente os limites financeiros.
+    # Dados compactos das campanhas (sem anúncios individuais para economizar tokens)
+    camps_compact = []
+    for c in campaigns_summary:
+        camps_compact.append({
+            "id": c["id"], "name": c["name"], "status": c["status"],
+            "budget": c["budget_atual"], "bmax": c["budget_maximo_permitido"], "bmin": c["budget_minimo_permitido"],
+            "cost": c["cost"], "roas": c["roas"], "ctr": c["ctr"], "cvr": c["cvr"],
+            "clicks": c["clicks"], "pct_budget": c["percentual_budget_usado"],
+        })
 
-FILOSOFIA PRINCIPAL:
-Nunca pause campanhas. Sempre prefira reduzir o budget ao mínimo (R$ {BUDGET_MINIMO}).
-Pausar destrói o histórico de relevância no algoritmo do Mercado Livre.
-Só pause em último caso absoluto: anúncio com ROAS 0 E mais de 50 cliques sem nenhuma conversão.
+    prompt = f"""Especialista ML ADS. Maximize ROAS respeitando limites.
 
-═══════════════════════════════════════
-REGRAS ABSOLUTAS:
-═══════════════════════════════════════
-- Limite diário total: R$ {config.DAILY_LIMIT}
-- Já gasto hoje: R$ {round(total_spent, 2)} ({round(pct_used * 100)}% do limite)
-- Saldo restante: R$ {round(config.DAILY_LIMIT - total_spent, 2)}
-- ROAS mínimo global: {config.MIN_ROAS}x
-- Aumento máximo por ciclo: {int(config.MAX_BID_INCREASE * 100)}%
-- Redução máxima por ciclo: {int(config.MAX_BID_DECREASE * 100)}%
-- Budget mínimo absoluto: R$ {BUDGET_MINIMO}
-- NUNCA sugira budget acima de R$ {config.DAILY_LIMIT}
+REGRAS: limite_diario=R${config.DAILY_LIMIT}, gasto=R${round(total_spent,2)}({round(pct_used*100)}%), saldo=R${round(config.DAILY_LIMIT-total_spent,2)}, min_roas={config.MIN_ROAS}x, budget_min=R${BUDGET_MINIMO}, max_aumento={int(config.MAX_BID_INCREASE*100)}%, max_reducao={int(config.MAX_BID_DECREASE*100)}%
+Hora:{datetime.now().strftime("%H:%M")}({periodo}) | Projecao:R${velocidade['projecao_fim_dia']}({velocidade['percentual_projecao']}%) | Alerta_velocidade:{"SIM" if velocidade['alerta_velocidade'] else "nao"}
 
-═══════════════════════════════════════
-LÓGICA DE DECISÃO POR ROAS:
-═══════════════════════════════════════
-- ROAS 0 com 50+ cliques sem conversão → única exceção para pausar
-- ROAS abaixo de {config.MIN_ROAS}x → reduzir budget ao mínimo (R$ {BUDGET_MINIMO})
-- ROAS entre {config.MIN_ROAS}x e 2.0x → reduzir budget 20%
-- ROAS entre 2.0x e 3.5x → manter budget atual
-- ROAS entre 3.5x e 5.0x → aumentar budget 10%
-- ROAS acima de 5.0x → aumentar budget 15%
+DECISAO_POR_ROAS: 0+50cliques_sem_conv→pause | <{config.MIN_ROAS}x→budget_min | {config.MIN_ROAS}-2x→-20% | 2-3.5x→manter | 3.5-5x→+10% | >5x→+15%
+NUNCA pause sem ROAS=0 E 50+cliques. Prefira sempre reduzir ao minimo.
 
-═══════════════════════════════════════
-SITUAÇÃO ATUAL:
-═══════════════════════════════════════
-- Horário: {datetime.now().strftime("%H:%M")} ({periodo})
-- Gasto por hora: R$ {velocidade['gasto_por_hora']}
-- Projeção fim do dia: R$ {velocidade['projecao_fim_dia']} ({velocidade['percentual_projecao']}% do limite)
-- Alerta de velocidade: {"SIM — reduzir budgets imediatamente!" if velocidade['alerta_velocidade'] else "Não"}
-
-═══════════════════════════════════════
-HISTÓRICO DE DECISÕES ANTERIORES:
-═══════════════════════════════════════
+HISTORICO(ultimas acoes):
 {historico}
 
-═══════════════════════════════════════
-CAMPANHAS E ANÚNCIOS AGORA:
-═══════════════════════════════════════
-{json.dumps(campaigns_summary, ensure_ascii=False, indent=2)}
+CAMPANHAS:
+{json.dumps(camps_compact, ensure_ascii=False, separators=(',',':'))}
 
-═══════════════════════════════════════
-INSTRUÇÕES DE ANÁLISE:
-═══════════════════════════════════════
-1. VELOCIDADE: Se projeção ultrapassa o limite, reduza budgets antes de qualquer outra ação.
-2. ROAS + CTR: Analise os dois juntos. CTR baixo = invisível no ML. ROAS baixo = prejuízo.
-3. SUGADORES: Campanha consumindo muito % do orçamento com ROAS mediano prejudica as melhores. Redistribua reduzindo a sugadora e aumentando a melhor.
-4. ANÚNCIOS INDIVIDUAIS: Se campanha é boa mas tem anúncios ruins dentro, pause SÓ os anúncios ruins — não a campanha.
-5. HISTÓRICO: Se uma ação funcionou antes, considere repetir. Se não funcionou, não repita.
-6. HORÁRIO: É {periodo}. De madrugada seja conservador. No horário de pico seja mais agressivo.
-7. REDISTRIBUIÇÃO: O saldo economizado reduzindo campanhas ruins deve ser direcionado para as melhores.
-
-Responda APENAS com JSON válido, sem texto adicional, sem markdown:
-{{
-  "actions": [
-    {{
-      "campaign_id": 123,
-      "campaign_name": "Nome",
-      "action": "reduce_budget" | "increase_budget" | "keep" | "pause",
-      "new_budget": 50.0,
-      "reason": "Motivo detalhado em português",
-      "ads_to_pause": [],
-      "ads_to_activate": []
-    }}
-  ],
-  "summary": "Resumo geral da análise e estratégia adotada neste ciclo",
-  "alerta": "Alerta importante ou string vazia se não houver"
-}}
-"""
+Responda APENAS JSON valido:
+{{"actions":[{{"campaign_id":0,"campaign_name":"","action":"reduce_budget|increase_budget|keep|pause","new_budget":0.0,"reason":"motivo","ads_to_pause":[],"ads_to_activate":[]}}],"summary":"resumo","alerta":""}}"""
 
     try:
         response = client.messages.create(
