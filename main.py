@@ -91,7 +91,7 @@ def oauth_authorize():
         "redirect_uri": os.getenv("ML_REDIRECT_URI"),
         "scope": "read_advertising write_advertising offline_access"
     })
-    url = f"https://auth.mercadolibre.com.br/authorization?{params}"
+    url = f"https://auth.mercadolivre.com.br/authorization?{params}"
     return redirect(url)
 
 
