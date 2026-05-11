@@ -52,33 +52,44 @@ def debug_ads():
     token = config.ML_ACCESS_TOKEN
     advertiser_id = config.ML_ADVERTISER_ID
     site_id = config.ML_SITE_ID
+
+    # Headers completos igual ao ml_client.py
     headers = {
         "Authorization": f"Bearer {token}",
+        "api-version": "2",
         "Content-Type": "application/json"
     }
 
+    from datetime import date
+    hoje = date.today().isoformat()
     resultados = {}
 
     # Teste 1: token válido
     r1 = http_requests.get("https://api.mercadolibre.com/users/me", headers=headers)
-    resultados["1_usuario"] = r1.json()
+    resultados["1_usuario_id"] = r1.json().get("id")
+    resultados["1_usuario_nick"] = r1.json().get("nickname")
 
-    # Teste 2: busca advertiser ID correto
+    # Teste 2: campanhas com api-version: 2
     r2 = http_requests.get(
-        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers",
-        headers=headers
-    )
-    resultados["2_advertisers"] = r2.json()
-
-    # Teste 3: campanhas com advertiser_id atual
-    from datetime import date
-    hoje = date.today().isoformat()
-    r3 = http_requests.get(
         f"https://api.mercadolibre.com/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search",
         headers=headers,
         params={"date_from": hoje, "date_to": hoje, "limit": 5}
     )
-    resultados["3_campanhas"] = r3.json()
+    resultados["2_campanhas_status"] = r2.status_code
+    resultados["2_campanhas"] = r2.json()
+
+    # Teste 3: tenta sem api-version
+    headers_sem_version = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    r3 = http_requests.get(
+        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search",
+        headers=headers_sem_version,
+        params={"date_from": hoje, "date_to": hoje, "limit": 5}
+    )
+    resultados["3_sem_api_version_status"] = r3.status_code
+    resultados["3_sem_api_version"] = r3.json()
 
     return jsonify(resultados)
 
