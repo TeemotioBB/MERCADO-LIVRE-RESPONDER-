@@ -60,6 +60,16 @@ def run_agent():
         log("AVISO", "Nenhuma campanha encontrada.")
         return
 
+    # Busca histórico dos últimos 30 dias
+    try:
+        history_30d = ml_client.get_campaigns_history(days=30)
+        # Cria índice por campaign_id para lookup rápido
+        hist_idx = {h["id"]: h for h in history_30d}
+        log("DADOS", f"Histórico 30d carregado: {len(history_30d)} campanhas")
+    except Exception as e:
+        hist_idx = {}
+        log("AVISO", f"Não foi possível carregar histórico 30d: {str(e)}")
+
     total_spent = sum(c.get("metrics", {}).get("cost", 0) for c in campaigns)
     pct_used = total_spent / config.DAILY_LIMIT if config.DAILY_LIMIT > 0 else 0
     velocidade = calcular_velocidade_gasto(total_spent)
@@ -136,14 +146,17 @@ def run_agent():
 
     historico = memory.format_history_for_prompt()
 
-    # Dados compactos das campanhas (sem anúncios individuais para economizar tokens)
+    # Dados compactos das campanhas com histórico 30d
     camps_compact = []
     for c in campaigns_summary:
+        h = hist_idx.get(c["id"], {})
         camps_compact.append({
             "id": c["id"], "name": c["name"], "status": c["status"],
             "budget": c["budget_atual"], "bmax": c["budget_maximo_permitido"], "bmin": c["budget_minimo_permitido"],
-            "cost": c["cost"], "roas": c["roas"], "ctr": c["ctr"], "cvr": c["cvr"],
-            "clicks": c["clicks"], "pct_budget": c["percentual_budget_usado"],
+            # Métricas de hoje
+            "hoje": {"cost": c["cost"], "roas": c["roas"], "ctr": c["ctr"], "cvr": c["cvr"], "clicks": c["clicks"], "pct_budget": c["percentual_budget_usado"]},
+            # Métricas dos últimos 30 dias
+            "30d": {"roas": h.get("roas_30d", 0), "cost": h.get("cost_30d", 0), "clicks": h.get("clicks_30d", 0), "ctr": h.get("ctr_30d", 0), "cvr": h.get("cvr_30d", 0), "receita": h.get("receita_30d", 0)},
         })
 
     prompt = f"""Especialista ML ADS. Maximize ROAS respeitando limites.
@@ -151,13 +164,16 @@ def run_agent():
 REGRAS: limite_diario=R${config.DAILY_LIMIT}, gasto=R${round(total_spent,2)}({round(pct_used*100)}%), saldo=R${round(config.DAILY_LIMIT-total_spent,2)}, min_roas={config.MIN_ROAS}x, budget_min=R${BUDGET_MINIMO}, max_aumento={int(config.MAX_BID_INCREASE*100)}%, max_reducao={int(config.MAX_BID_DECREASE*100)}%
 Hora:{datetime.now().strftime("%H:%M")}({periodo}) | Projecao:R${velocidade['projecao_fim_dia']}({velocidade['percentual_projecao']}%) | Alerta_velocidade:{"SIM" if velocidade['alerta_velocidade'] else "nao"}
 
-DECISAO_POR_ROAS: 0+50cliques_sem_conv→pause | <{config.MIN_ROAS}x→budget_min | {config.MIN_ROAS}-2x→-20% | 2-3.5x→manter | 3.5-5x→+10% | >5x→+15%
-NUNCA pause sem ROAS=0 E 50+cliques. Prefira sempre reduzir ao minimo.
+DECISAO_POR_ROAS(use roas de HOJE se disponivel, senao use 30d):
+ROAS=0+50cliques_sem_conv→pause | <{config.MIN_ROAS}x→budget_min | {config.MIN_ROAS}-2x→-20% | 2-3.5x→manter | 3.5-5x→+10% | >5x→+15%
+NUNCA pause sem ROAS=0 E 50+cliques. Se hoje tem poucos dados, use historico 30d para decisao.
+IMPORTANTE: campanha com roas_30d alto mas roas_hoje=0 e poucos cliques = MANTER (dia ruim pontual).
+IMPORTANTE: campanha com roas_30d baixo E roas_hoje baixo = candidata a reducao.
 
-HISTORICO(ultimas acoes):
+HISTORICO_DECISOES_ANTERIORES:
 {historico}
 
-CAMPANHAS:
+CAMPANHAS(hoje + ultimos 30 dias):
 {json.dumps(camps_compact, ensure_ascii=False, separators=(',',':'))}
 
 Responda APENAS JSON valido:
