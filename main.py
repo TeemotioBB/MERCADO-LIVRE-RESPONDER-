@@ -17,7 +17,11 @@ CORS(app)
 # ─────────────────────────────────────────────
 @app.route("/dashboard")
 def dashboard():
-    return send_from_directory(".", "ml-ads-dashboard.html")
+    response = send_from_directory(".", "ml-ads-dashboard.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 # ─────────────────────────────────────────────
