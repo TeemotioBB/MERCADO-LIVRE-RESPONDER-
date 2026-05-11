@@ -167,9 +167,29 @@
   .spark-bar:last-child { opacity: 1; }
   .loading { opacity: 0.4; font-style: italic; }
   .error-msg { color: var(--red); font-size: 12px; padding: 8px; }
+  /* URL CONFIG BANNER */
+  .url-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 2000; background: #1a1f2e; border-bottom: 2px solid var(--accent); padding: 10px 20px; display: flex; align-items: center; gap: 12px; font-size: 13px; }
+  .url-banner input { flex: 1; background: var(--surface3); border: 1px solid var(--border2); border-radius: 6px; padding: 6px 10px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none; max-width: 420px; }
+  .url-banner input:focus { border-color: var(--accent); }
+  .url-banner .url-label { color: var(--muted); white-space: nowrap; }
+  .url-banner .url-status { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 10px; white-space: nowrap; }
+  .url-banner .url-status.ok { background: rgba(34,197,94,0.15); color: var(--green); }
+  .url-banner .url-status.err { background: rgba(239,68,68,0.15); color: var(--red); }
+  .url-banner .url-status.checking { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  body.has-banner .shell { margin-top: 48px; }
 </style>
 </head>
 <body>
+<!-- URL CONFIG BANNER — aparece quando o arquivo é aberto localmente -->
+<div class="url-banner" id="url-banner">
+  <i class="ti ti-plug-connected" style="color:var(--accent);font-size:18px;flex-shrink:0"></i>
+  <span class="url-label">URL do servidor Flask:</span>
+  <input type="text" id="server-url-input" placeholder="http://localhost:8080" value="http://localhost:8080" oninput="onUrlChange()" onkeydown="if(event.key==='Enter') connectServer()" />
+  <button class="btn btn-primary" onclick="connectServer()" style="white-space:nowrap"><i class="ti ti-plug"></i> Conectar</button>
+  <span class="url-status checking" id="url-status">aguardando...</span>
+  <button class="btn" onclick="document.getElementById('url-banner').style.display='none';document.body.classList.remove('has-banner')" style="padding:6px 8px;margin-left:auto" title="Fechar"><i class="ti ti-x"></i></button>
+</div>
+
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
@@ -461,8 +481,56 @@
 
 <script>
 // ─── CONFIG ──────────────────────────────────────────────────────────────
-// Detecta a base URL automaticamente (funciona em local e no Railway)
-const BASE_URL = window.location.origin;
+// Se o dashboard for servido pelo Flask (/dashboard), usa a própria origem.
+// Se for aberto como arquivo local, usa o input do banner.
+const IS_FILE_PROTOCOL = window.location.protocol === 'file:';
+let BASE_URL = IS_FILE_PROTOCOL ? (localStorage.getItem('ml_server_url') || 'http://localhost:8080') : window.location.origin;
+
+// Mostra banner só quando aberto como arquivo local
+if (IS_FILE_PROTOCOL) {
+  document.body.classList.add('has-banner');
+  const input = document.getElementById('server-url-input');
+  if (input) input.value = BASE_URL;
+} else {
+  const banner = document.getElementById('url-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+function onUrlChange() {
+  const v = document.getElementById('server-url-input')?.value.trim();
+  setUrlStatus('checking', '...');
+}
+
+async function connectServer() {
+  const v = document.getElementById('server-url-input')?.value.trim().replace(/\/$/, '');
+  if (!v) return;
+  BASE_URL = v;
+  if (IS_FILE_PROTOCOL) localStorage.setItem('ml_server_url', v);
+  setUrlStatus('checking', 'conectando...');
+  const ok = await pingServer();
+  if (ok) {
+    setUrlStatus('ok', '● conectado');
+    showToast('success', `Conectado em ${v}`);
+    await refreshAll();
+  } else {
+    setUrlStatus('err', '✕ sem resposta');
+    showToast('error', `Não foi possível conectar em ${v} — verifique se o Flask está rodando.`);
+  }
+}
+
+async function pingServer() {
+  try {
+    const res = await fetch(BASE_URL + '/api/status', { signal: AbortSignal.timeout(4000) });
+    return res.ok;
+  } catch { return false; }
+}
+
+function setUrlStatus(cls, txt) {
+  const el = document.getElementById('url-status');
+  if (!el) return;
+  el.className = `url-status ${cls}`;
+  el.textContent = txt;
+}
 
 // ─── STATE ───────────────────────────────────────────────────────────────
 let currentMode = 'semi';
@@ -477,8 +545,25 @@ let configData = {};
 let pollInterval = null;
 
 function startPolling() {
-  refreshAll();
-  pollInterval = setInterval(() => {
+  if (!IS_FILE_PROTOCOL) {
+    // Servido pelo Flask: conecta direto
+    refreshAll();
+  } else {
+    // Arquivo local: tenta pingar antes
+    pingServer().then(ok => {
+      if (ok) {
+        setUrlStatus('ok', '● conectado');
+        refreshAll();
+      } else {
+        setUrlStatus('err', '✕ sem resposta');
+        showToast('warning', 'Servidor não encontrado. Verifique a URL acima e clique em Conectar.');
+      }
+    });
+  }
+  pollInterval = setInterval(async () => {
+    const ok = await pingServer();
+    if (!ok) { setUrlStatus('err', '✕ sem resposta'); return; }
+    setUrlStatus('ok', '● conectado');
     refreshStatus();
     refreshLog();
     if (currentTab === 'pending') refreshPending();
