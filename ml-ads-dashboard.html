@@ -492,16 +492,6 @@
 const IS_FILE_PROTOCOL = window.location.protocol === 'file:';
 let BASE_URL = IS_FILE_PROTOCOL ? (localStorage.getItem('ml_server_url') || 'http://localhost:8080') : window.location.origin;
 
-// Mostra banner só quando aberto como arquivo local
-if (IS_FILE_PROTOCOL) {
-  document.body.classList.add('has-banner');
-  const input = document.getElementById('server-url-input');
-  if (input) input.value = BASE_URL;
-} else {
-  const banner = document.getElementById('url-banner');
-  if (banner) banner.style.display = 'none';
-}
-
 function onUrlChange() {
   const v = document.getElementById('server-url-input')?.value.trim();
   setUrlStatus('checking', '...');
@@ -1135,6 +1125,16 @@ function updateTime() {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────
 window.addEventListener('load', async () => {
+  // Controla banner
+  if (!IS_FILE_PROTOCOL) {
+    const banner = document.getElementById('url-banner');
+    if (banner) banner.style.display = 'none';
+  } else {
+    document.body.classList.add('has-banner');
+    const input = document.getElementById('server-url-input');
+    if (input) input.value = BASE_URL;
+  }
+
   setInterval(updateTime, 1000);
   updateTime();
   initChart();
