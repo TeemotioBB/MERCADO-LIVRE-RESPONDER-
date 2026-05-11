@@ -230,8 +230,24 @@ def api_reject_all():
 # ─────────────────────────────────────────────
 # API: HISTÓRICO DE DECISÕES
 # ─────────────────────────────────────────────
-@app.route("/api/history")
-def api_history():
+@app.route("/api/pace")
+def api_pace():
+    """Verifica ritmo de gasto sem chamar a IA — custo zero."""
+    try:
+        import ml_client
+        campaigns = ml_client.get_campaigns()
+        total_spent = sum(c.get("metrics", {}).get("cost", 0) for c in campaigns)
+        alertas = agent.verificar_pace(campaigns, total_spent)
+        return jsonify({
+            "total_spent": round(total_spent, 2),
+            "alertas": alertas,
+            "tem_alerta": len(alertas) > 0
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
+
     hist = memory.load_history()
     return jsonify(list(reversed(hist)))
 
