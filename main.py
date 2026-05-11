@@ -3,6 +3,30 @@ import scheduler
 import agent
 import config
 
+import requests as http_requests
+import os
+
+@app.route("/oauth/callback")
+def oauth_callback():
+    from flask import request
+    code = request.args.get("code")
+    if not code:
+        return jsonify({"erro": "code não encontrado"}), 400
+
+    resp = http_requests.post("https://api.mercadolibre.com/oauth/token", data={
+        "grant_type": "authorization_code",
+        "client_id": os.getenv("ML_APP_ID"),
+        "client_secret": os.getenv("ML_CLIENT_SECRET"),
+        "code": code,
+        "redirect_uri": os.getenv("ML_REDIRECT_URI")
+    })
+    data = resp.json()
+    return jsonify({
+        "access_token": data.get("access_token"),
+        "user_id": data.get("user_id"),
+        "expires_in": data.get("expires_in")
+    })
+
 app = Flask(__name__)
 
 @app.route("/")
