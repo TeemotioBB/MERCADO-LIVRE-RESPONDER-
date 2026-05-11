@@ -50,10 +50,9 @@ def status():
 @app.route("/debug-ads")
 def debug_ads():
     token = config.ML_ACCESS_TOKEN
-    advertiser_id = config.ML_ADVERTISER_ID
+    user_id = config.ML_ADVERTISER_ID
     site_id = config.ML_SITE_ID
 
-    # Headers completos igual ao ml_client.py
     headers = {
         "Authorization": f"Bearer {token}",
         "api-version": "2",
@@ -64,32 +63,21 @@ def debug_ads():
     hoje = date.today().isoformat()
     resultados = {}
 
-    # Teste 1: token válido
-    r1 = http_requests.get("https://api.mercadolibre.com/users/me", headers=headers)
-    resultados["1_usuario_id"] = r1.json().get("id")
-    resultados["1_usuario_nick"] = r1.json().get("nickname")
+    # Tenta descobrir o advertiser_id correto
+    urls_tentadas = [
+        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers/{user_id}",
+        f"https://api.mercadolibre.com/advertising/advertisers?user_id={user_id}",
+        f"https://api.mercadolibre.com/users/{user_id}/advertising",
+        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers?user_id={user_id}",
+    ]
 
-    # Teste 2: campanhas com api-version: 2
-    r2 = http_requests.get(
-        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search",
-        headers=headers,
-        params={"date_from": hoje, "date_to": hoje, "limit": 5}
-    )
-    resultados["2_campanhas_status"] = r2.status_code
-    resultados["2_campanhas"] = r2.json()
-
-    # Teste 3: tenta sem api-version
-    headers_sem_version = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    r3 = http_requests.get(
-        f"https://api.mercadolibre.com/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search",
-        headers=headers_sem_version,
-        params={"date_from": hoje, "date_to": hoje, "limit": 5}
-    )
-    resultados["3_sem_api_version_status"] = r3.status_code
-    resultados["3_sem_api_version"] = r3.json()
+    for i, url in enumerate(urls_tentadas):
+        r = http_requests.get(url, headers=headers)
+        resultados[f"tentativa_{i+1}"] = {
+            "url": url,
+            "status": r.status_code,
+            "resposta": r.json()
+        }
 
     return jsonify(resultados)
 
