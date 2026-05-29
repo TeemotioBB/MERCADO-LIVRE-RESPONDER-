@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>ML ADS — Painel de Controle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0d0f12; --surface: #141720; --surface2: #1a1f2e; --surface3: #1f2535;
+    --border: rgba(255,255,255,0.06); --border2: rgba(255,255,255,0.12);
+    --text: #e8eaf0; --muted: #8892a4; --hint: #4a5568;
+    --accent: #f97316; --accent2: #fb923c;
+    --green: #22c55e; --red: #ef4444; --yellow: #eab308; --blue: #3b82f6;
+    --purple: #a855f7; --teal: #14b8a6;
+    --font: 'Syne', sans-serif; --mono: 'IBM Plex Mono', monospace;
+    --r: 8px; --r2: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+  .shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 16px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .main { padding: 24px 28px; overflow-x: hidden; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 8px 4px 20px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .brand-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #fff; flex-shrink: 0; }
+  .brand-name { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.2; }
+  .brand-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .nav-section { font-size: 10px; font-weight: 600; color: var(--hint); text-transform: uppercase; letter-spacing: 1.5px; padding: 12px 8px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r); cursor: pointer; color: var(--muted); font-size: 13px; transition: all .15s; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: rgba(249,115,22,0.12); color: var(--accent); }
+  .nav-item i { font-size: 16px; flex-shrink: 0; }
+  .nav-badge { margin-left: auto; background: var(--accent); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 10px; font-family: var(--mono); }
+  .nav-badge.green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .nav-badge.red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .mode-box { margin-top: auto; background: var(--surface2); border-radius: var(--r2); padding: 14px; border: 1px solid var(--border); }
+  .mode-label { font-size: 11px; color: var(--muted); margin-bottom: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 1px; }
+  .mode-btns { display: flex; flex-direction: column; gap: 6px; }
+  .mode-btn { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--r); cursor: pointer; font-size: 12px; font-weight: 500; transition: all .2s; border: 1px solid transparent; background: none; color: var(--muted); width: 100%; text-align: left; }
+  .mode-btn:hover { border-color: var(--border2); color: var(--text); }
+  .mode-btn.active-auto { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.3); color: var(--green); }
+  .mode-btn.active-semi { background: rgba(234,179,8,0.12); border-color: rgba(234,179,8,0.3); color: var(--yellow); }
+  .mode-btn.active-manual { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: var(--red); }
+  .mode-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .mode-btn.active-auto .mode-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .mode-btn.active-semi .mode-dot { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .mode-btn.active-manual .mode-dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .mode-dot-off { background: var(--hint); }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .page-title { font-size: 22px; font-weight: 700; }
+  .page-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--r); cursor: pointer; font-size: 13px; font-weight: 500; font-family: var(--font); border: 1px solid var(--border2); background: var(--surface); color: var(--text); transition: all .15s; }
+  .btn:hover { background: var(--surface2); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent2); border-color: var(--accent2); }
+  .btn i { font-size: 15px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status-bar { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: var(--r2); padding: 12px 16px; margin-bottom: 20px; border: 1px solid var(--border); flex-wrap: wrap; }
+  .status-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status-dot.green { background: var(--green); box-shadow: 0 0 4px var(--green); }
+  .status-dot.yellow { background: var(--yellow); }
+  .status-dot.red { background: var(--red); }
+  .status-sep { width: 1px; height: 16px; background: var(--border2); }
+  .status-label { color: var(--muted); }
+  .status-value { color: var(--text); font-family: var(--mono); font-size: 12px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: var(--surface); border-radius: var(--r2); padding: 16px; border: 1px solid var(--border); }
+  .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+  .kpi-value { font-size: 24px; font-weight: 700; line-height: 1; font-family: var(--mono); }
+  .kpi-delta { font-size: 11px; margin-top: 6px; color: var(--muted); }
+  .kpi-bar { height: 3px; background: var(--surface3); border-radius: 2px; margin-top: 10px; }
+  .kpi-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width .5s; }
+  .grid-2col { display: grid; grid-template-columns: 1fr 380px; gap: 16px; margin-bottom: 16px; }
+  .grid-full { margin-bottom: 16px; }
+  .card { background: var(--surface); border-radius: var(--r2); border: 1px solid var(--border); overflow: hidden; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .card-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card-title i { font-size: 15px; color: var(--accent); }
+  .card-body { padding: 16px; }
+  .camp-table { width: 100%; border-collapse: collapse; }
+  .camp-table th { font-size: 11px; font-weight: 500; color: var(--hint); text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 10px; text-align: left; }
+  .camp-table td { padding: 10px 10px; border-top: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+  .camp-table tr:hover td { background: var(--surface2); }
+  .camp-name { font-weight: 500; color: var(--text); }
+  .camp-id { font-family: var(--mono); font-size: 11px; color: var(--hint); margin-top: 2px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge-green { background: rgba(34,197,94,0.12); color: var(--green); }
+  .badge-red { background: rgba(239,68,68,0.12); color: var(--red); }
+  .badge-yellow { background: rgba(234,179,8,0.12); color: var(--yellow); }
+  .badge-blue { background: rgba(59,130,246,0.12); color: var(--blue); }
+  .badge-orange { background: rgba(249,115,22,0.12); color: var(--accent); }
+  .badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .mono { font-family: var(--mono); }
+  .text-right { text-align: right; }
+  .text-green { color: var(--green); }
+  .text-red { color: var(--red); }
+  .text-yellow { color: var(--yellow); }
+  .text-muted { color: var(--muted); }
+  .action-row { display: flex; gap: 4px; }
+  .act-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; transition: all .15s; }
+  .act-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+  .act-btn.approve:hover { background: rgba(34,197,94,0.12); color: var(--green); border-color: rgba(34,197,94,0.3); }
+  .act-btn.reject:hover { background: rgba(239,68,68,0.12); color: var(--red); border-color: rgba(239,68,68,0.3); }
+  .log-list { display: flex; flex-direction: column; gap: 2px; }
+  .log-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .log-item:last-child { border-bottom: none; }
+  .log-time { font-family: var(--mono); color: var(--hint); flex-shrink: 0; width: 42px; }
+  .log-action { flex-shrink: 0; width: 130px; }
+  .log-msg { color: var(--muted); line-height: 1.4; }
+  .approval-card { background: var(--surface2); border-radius: var(--r); padding: 12px 14px; border: 1px solid var(--border); margin-bottom: 8px; }
+  .approval-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .approval-name { font-size: 13px; font-weight: 500; }
+  .approval-action { font-size: 12px; color: var(--muted); margin-bottom: 8px; line-height: 1.4; }
+  .approval-reason { font-size: 11px; color: var(--hint); font-style: italic; }
+  .approval-btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-approve { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.25); color: var(--green); padding: 6px 12px; border-radius: var(--r); font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .15s; }
+  .btn-approve:hover { background: rgba(34,197,94,0.2); }
+  .btn-reject { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: var(--red); padding: 6px 12px; border-radius: var(--r); font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .15s; }
+  .btn-reject:hover { background: rgba(239,68,68,0.15); }
+  .btn-edit { background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.2); color: var(--yellow); padding: 6px 12px; border-radius: var(--r); font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .15s; }
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 16px; }
+  .gauge-svg { width: 180px; height: 110px; }
+  .gauge-values { display: flex; justify-content: space-between; width: 100%; margin-top: 8px; font-family: var(--mono); }
+  .chart-wrap { position: relative; width: 100%; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab { padding: 8px 14px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .config-item { background: var(--surface2); border-radius: var(--r); padding: 12px; border: 1px solid var(--border); }
+  .config-name { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-family: var(--mono); }
+  .config-input { width: 100%; background: var(--surface3); border: 1px solid var(--border2); border-radius: 6px; padding: 6px 10px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none; }
+  .config-input:focus { border-color: var(--accent); }
+  .alert-banner { display: flex; align-items: center; gap: 10px; background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.25); border-radius: var(--r); padding: 10px 14px; margin-bottom: 16px; font-size: 13px; color: var(--yellow); }
+  .alert-banner i { font-size: 16px; flex-shrink: 0; }
+  .alert-banner.red { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.25); color: var(--red); }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+  .pulse { animation: pulse 2s infinite; }
+  .section-title { font-size: 12px; font-weight: 600; color: var(--hint); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-label { font-size: 13px; }
+  .toggle-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; inset: 0; background: var(--surface3); border-radius: 10px; cursor: pointer; transition: .2s; }
+  .toggle-slider:before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: var(--hint); border-radius: 50%; transition: .2s; }
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(16px); background: #fff; }
+  @keyframes run-pulse { 0% { box-shadow: 0 0 0 0 rgba(249,115,22,0.4); } 70% { box-shadow: 0 0 0 8px rgba(249,115,22,0); } 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); } }
+  .btn-run { animation: run-pulse 2s infinite; }
+  .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--r); padding: 10px 14px; font-size: 13px; display: flex; align-items: center; gap: 8px; pointer-events: all; box-shadow: 0 8px 24px rgba(0,0,0,0.4); animation: slideIn .2s ease; max-width: 320px; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+  .toast.success i { color: var(--green); }
+  .toast.warning i { color: var(--yellow); }
+  .toast.error i { color: var(--red); }
+  .sparkline { display: flex; align-items: flex-end; gap: 2px; height: 24px; }
+  .spark-bar { width: 4px; border-radius: 1px; background: var(--accent); opacity: 0.5; }
+  .spark-bar:last-child { opacity: 1; }
+  .loading { opacity: 0.4; font-style: italic; }
+  .error-msg { color: var(--red); font-size: 12px; padding: 8px; }
+  /* URL CONFIG BANNER */
+  
+</style>
+</head>
+<body>
+
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon"><i class="ti ti-robot"></i></div>
+      <div>
+        <div class="brand-name">ML ADS</div>
+        <div class="brand-sub" id="brand-sub">v2.4 • online</div>
+      </div>
+    </div>
+    <div class="nav-section">Dashboard</div>
+    <button class="nav-item active" onclick="showTab('overview')"><i class="ti ti-layout-dashboard"></i> Visão Geral</button>
+    <button class="nav-item" onclick="showTab('campaigns')"><i class="ti ti-speakerphone"></i> Campanhas <span class="nav-badge green" id="badge-campaigns">—</span></button>
+    <button class="nav-item" onclick="showTab('pending')"><i class="ti ti-clock-check"></i> Aprovações <span class="nav-badge red" id="badge-pending">0</span></button>
+    <div class="nav-section">Controle</div>
+    <button class="nav-item" onclick="showTab('log')"><i class="ti ti-terminal-2"></i> Log da IA</button>
+    <button class="nav-item" onclick="showTab('config')"><i class="ti ti-adjustments-horizontal"></i> Configurações</button>
+    <button class="nav-item" onclick="showTab('history')"><i class="ti ti-history"></i> Histórico</button>
+    <div class="nav-section">Agente</div>
+    <button class="nav-item" onclick="runAgentNow()"><i class="ti ti-player-play"></i> Rodar Agora</button>
+    <button class="nav-item" onclick="showTab('scheduler')"><i class="ti ti-calendar-event"></i> Agendamento</button>
+    <div class="mode-box">
+      <div class="mode-label">Modo da IA</div>
+      <div class="mode-btns">
+        <button class="mode-btn" id="mode-auto" onclick="setMode('auto')">
+          <span class="mode-dot mode-dot-off" id="dot-auto"></span>
+          <div><div>Autônomo</div><div style="font-size:10px;opacity:.7">IA age sozinha</div></div>
+        </button>
+        <button class="mode-btn active-semi" id="mode-semi" onclick="setMode('semi')">
+          <span class="mode-dot" id="dot-semi"></span>
+          <div><div>Supervisionado</div><div style="font-size:10px;opacity:.7">Aprova antes de agir</div></div>
+        </button>
+        <button class="mode-btn" id="mode-manual" onclick="setMode('manual')">
+          <span class="mode-dot mode-dot-off" id="dot-manual"></span>
+          <div><div>Manual</div><div style="font-size:10px;opacity:.7">IA só sugere</div></div>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- OVERVIEW TAB -->
+    <div id="tab-overview">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Visão Geral</div>
+          <div class="page-sub"><span id="live-date"></span> · <span id="live-time"></span> · <span class="pulse" style="color:var(--green);font-size:12px;">● Ao vivo</span></div>
+        </div>
+        <div class="header-actions">
+          <button class="btn" onclick="refreshAll()"><i class="ti ti-refresh"></i> Atualizar</button>
+          <button class="btn btn-primary btn-run" onclick="runAgentNow()"><i class="ti ti-robot"></i> Rodar Agente</button>
+        </div>
+      </div>
+
+      <div class="alert-banner red" id="velocity-alert" style="display:none;">
+        <i class="ti ti-alert-triangle"></i>
+        <span id="velocity-alert-msg">Alerta de velocidade de gasto!</span>
+      </div>
+
+      <!-- ALERTAS DE PACE POR CAMPANHA -->
+      <div id="pace-alerts-container"></div>
+
+      <div class="status-bar">
+        <div class="status-item"><div class="status-dot green pulse"></div><span class="status-label">Agente</span><span class="status-value">ativo</span></div>
+        <div class="status-sep"></div>
+        <div class="status-item"><span class="status-label">Modo</span><span class="status-value" id="mode-display" style="color:var(--yellow)">Supervisionado</span></div>
+        <div class="status-sep"></div>
+        <div class="status-item"><span class="status-label">Campanhas ativas</span><span class="status-value" id="sb-active">—</span></div>
+        <div class="status-sep"></div>
+        <div class="status-item"><span class="status-label">Intervalo</span><span class="status-value" id="sb-interval">—</span></div>
+        <div class="status-sep"></div>
+        <div class="status-item"><span class="status-label">Min ROAS</span><span class="status-value" id="sb-minroas">—</span></div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Gasto Hoje</div>
+          <div class="kpi-value" id="kpi-spent" style="color:var(--accent)">—</div>
+          <div class="kpi-delta" id="kpi-spent-sub" style="color:var(--muted)"></div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-spent-bar" style="width:0%"></div></div>
+          <div id="kpi-spent-pct" style="font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--mono)"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">ROAS Médio</div>
+          <div class="kpi-value" id="kpi-roas" style="color:var(--green)">—</div>
+          <div class="kpi-delta" style="color:var(--muted)">ROAS médio das campanhas ativas</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-roas-bar" style="width:0%;background:var(--green)"></div></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Cliques Hoje</div>
+          <div class="kpi-value" id="kpi-clicks">—</div>
+          <div class="kpi-delta" style="color:var(--muted)">Total de cliques do dia</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" style="width:60%;background:var(--blue)"></div></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Saldo Restante</div>
+          <div class="kpi-value" id="kpi-saldo" style="color:var(--teal)">—</div>
+          <div class="kpi-delta" id="kpi-saldo-sub" style="color:var(--muted)"></div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-saldo-bar" style="width:0%;background:var(--teal)"></div></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Receita Gerada</div>
+          <div class="kpi-value" id="kpi-receita" style="color:var(--purple)">—</div>
+          <div class="kpi-delta" style="color:var(--muted)">Total amount (direto + indireto)</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" style="width:70%;background:var(--purple)"></div></div>
+        </div>
+      </div>
+
+      <div class="grid-2col">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-chart-area"></i> Gasto × ROAS (hoje)</div>
+            <div style="display:flex;gap:6px">
+              <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:3px;background:var(--accent);display:inline-block;border-radius:2px"></span>Gasto</span>
+              <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px"><span style="width:10px;height:3px;background:var(--green);display:inline-block;border-radius:2px"></span>ROAS</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-wrap" style="height:200px;">
+              <canvas id="mainChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-gauge"></i> Orçamento Diário</div>
+            <span class="badge badge-yellow" id="gauge-badge">—%</span>
+          </div>
+          <div class="card-body">
+            <div class="gauge-wrap">
+              <svg class="gauge-svg" viewBox="0 0 200 110">
+                <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#1f2535" stroke-width="16" stroke-linecap="round"/>
+                <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#f97316" stroke-width="16" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3" id="gauge-fill"/>
+                <text x="100" y="92" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="22" font-weight="600" fill="#f97316" id="gauge-pct-text">0%</text>
+                <text x="100" y="108" text-anchor="middle" font-family="'Syne',sans-serif" font-size="11" fill="#8892a4" id="gauge-sub-text">R$ 0 / R$ 0</text>
+              </svg>
+              <div class="gauge-values" style="padding:0 10px">
+                <div style="text-align:center"><div style="font-size:10px;color:var(--muted)">Saldo</div><div class="mono" style="font-size:14px;color:var(--green);font-weight:600" id="g-saldo">—</div></div>
+                <div style="text-align:center"><div style="font-size:10px;color:var(--muted)">Projeção</div><div class="mono" style="font-size:14px;color:var(--yellow);font-weight:600" id="g-projecao">—</div></div>
+                <div style="text-align:center"><div style="font-size:10px;color:var(--muted)">Mensal est.</div><div class="mono" style="font-size:14px;color:var(--muted);font-weight:600" id="g-mensal">—</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card grid-full">
+        <div class="card-header">
+          <div class="card-title"><i class="ti ti-speakerphone"></i> Campanhas ativas</div>
+          <button class="btn" onclick="showTab('campaigns')" style="font-size:12px;padding:5px 10px;">Ver todas <i class="ti ti-arrow-right"></i></button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <table class="camp-table">
+            <thead><tr><th>Campanha</th><th>Status</th><th class="text-right">Budget</th><th class="text-right">Gasto</th><th class="text-right">ROAS</th><th class="text-right">Cliques</th><th class="text-right">CTR</th><th>Ação IA</th></tr></thead>
+            <tbody id="quick-campaigns"><tr><td colspan="8" class="loading" style="padding:20px;text-align:center">Carregando campanhas...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CAMPAIGNS TAB -->
+    <div id="tab-campaigns" style="display:none">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Campanhas</div>
+          <div class="page-sub" id="camp-sub">Carregando...</div>
+        </div>
+        <div class="header-actions">
+          <button class="btn" onclick="refreshAll()"><i class="ti ti-refresh"></i> Atualizar</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:0">
+          <table class="camp-table">
+            <thead><tr><th>Campanha / ID</th><th>Status</th><th class="text-right">Budget</th><th class="text-right">Gasto</th><th class="text-right">ROAS</th><th class="text-right">Cliques</th><th class="text-right">CPC</th><th class="text-right">CTR</th><th class="text-right">CVR</th><th>Última IA</th><th>Ações</th></tr></thead>
+            <tbody id="all-campaigns"><tr><td colspan="11" class="loading" style="padding:20px;text-align:center">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PENDING APPROVALS TAB -->
+    <div id="tab-pending" style="display:none">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Aprovações Pendentes</div>
+          <div class="page-sub" id="pending-sub">0 ações aguardando</div>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="approveAll()"><i class="ti ti-check"></i> Aprovar Todas</button>
+          <button class="btn" style="color:var(--red);border-color:rgba(239,68,68,0.3)" onclick="rejectAll()"><i class="ti ti-x"></i> Rejeitar Todas</button>
+        </div>
+      </div>
+      <div class="alert-banner" id="pending-mode-banner">
+        <i class="ti ti-clock"></i>
+        <span>Modo supervisionado ativo — a IA gerou sugestões aguardando sua aprovação antes de executar.</span>
+      </div>
+      <div id="pending-list"></div>
+    </div>
+
+    <!-- LOG TAB -->
+    <div id="tab-log" style="display:none">
+      <div class="page-header">
+        <div><div class="page-title">Log da IA</div><div class="page-sub">Atividade do agente em tempo real</div></div>
+        <div class="header-actions">
+          <button class="btn" onclick="refreshLog()"><i class="ti ti-refresh"></i> Atualizar</button>
+          <button class="btn"><i class="ti ti-download"></i> Exportar</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="max-height:600px;overflow-y:auto;" id="log-container">
+          <div class="log-list" id="log-list"><div class="loading" style="padding:20px;text-align:center">Carregando log...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONFIG TAB -->
+    <div id="tab-config" style="display:none">
+      <div class="page-header">
+        <div><div class="page-title">Configurações</div><div class="page-sub">Parâmetros do agente e limites financeiros</div></div>
+        <div class="header-actions"><button class="btn btn-primary" onclick="saveConfig()"><i class="ti ti-device-floppy"></i> Salvar</button></div>
+      </div>
+      <div class="grid-2col" style="grid-template-columns:1fr 1fr">
+        <div class="card">
+          <div class="card-header"><div class="card-title"><i class="ti ti-coin"></i> Limites Financeiros</div></div>
+          <div class="card-body">
+            <div class="config-grid">
+              <div class="config-item"><div class="config-name">DAILY_LIMIT (R$)</div><input class="config-input" type="number" id="cfg-daily" /></div>
+              <div class="config-item"><div class="config-name">MONTHLY_LIMIT (R$)</div><input class="config-input" type="number" id="cfg-monthly" /></div>
+              <div class="config-item"><div class="config-name">ALERT_THRESHOLD (0–1)</div><input class="config-input" type="number" step="0.01" id="cfg-alert" /></div>
+              <div class="config-item"><div class="config-name">MIN_ROAS</div><input class="config-input" type="number" step="0.1" id="cfg-roas" /></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title"><i class="ti ti-adjustments"></i> Ajustes & Comportamento</div></div>
+          <div class="card-body">
+            <div class="config-grid">
+              <div class="config-item"><div class="config-name">MAX_BID_INCREASE</div><input class="config-input" type="number" step="0.01" id="cfg-inc" /></div>
+              <div class="config-item"><div class="config-name">MAX_BID_DECREASE</div><input class="config-input" type="number" step="0.01" id="cfg-dec" /></div>
+            </div>
+            <div style="margin-top:20px">
+              <div class="section-title">Comportamento</div>
+              <div class="toggle-row">
+                <div><div class="toggle-label">Nunca pausar campanhas</div><div class="toggle-sub">Reduz ao mínimo em vez de pausar</div></div>
+                <label class="toggle"><input type="checkbox" checked /><span class="toggle-slider"></span></label>
+              </div>
+              <div class="toggle-row">
+                <div><div class="toggle-label">Redistribuição automática</div><div class="toggle-sub">Mover budget de campanhas ruins para boas</div></div>
+                <label class="toggle"><input type="checkbox" checked /><span class="toggle-slider"></span></label>
+              </div>
+              <div class="toggle-row">
+                <div><div class="toggle-label">Modo conservador noturno</div><div class="toggle-sub">Reduzir budgets entre 00h–07h</div></div>
+                <label class="toggle"><input type="checkbox" checked /><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div id="tab-history" style="display:none">
+      <div class="page-header">
+        <div><div class="page-title">Histórico de Decisões</div><div class="page-sub">Todas as ações executadas pela IA</div></div>
+        <div class="header-actions"><button class="btn" onclick="refreshHistory()"><i class="ti ti-refresh"></i> Atualizar</button></div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:0">
+          <table class="camp-table">
+            <thead><tr><th>Hora</th><th>Campanha</th><th>Ação</th><th class="text-right">Budget Ant.</th><th>Motivo</th><th class="text-right">ROAS</th></tr></thead>
+            <tbody id="history-table"><tr><td colspan="6" class="loading" style="padding:20px;text-align:center">Carregando histórico...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCHEDULER TAB -->
+    <div id="tab-scheduler" style="display:none">
+      <div class="page-header">
+        <div><div class="page-title">Agendamento</div><div class="page-sub">Próximas execuções do agente</div></div>
+      </div>
+      <div class="card" style="max-width:500px">
+        <div class="card-header"><div class="card-title"><i class="ti ti-calendar-event"></i> Próximas execuções</div></div>
+        <div class="card-body"><div id="schedule-list"></div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────
+const BASE_URL = window.location.origin;
+
+// ─── STATE ───────────────────────────────────────────────────────────────
+let currentMode = 'semi';
+let currentTab = 'overview';
+let mainChart = null;
+let statusData = {};
+let campaignsData = [];
+let pendingData = [];
+let configData = {};
+
+// ─── POLLING ─────────────────────────────────────────────────────────────
+let pollInterval = null;
+
+function startPolling() {
+  refreshAll();
+  pollInterval = setInterval(() => {
+    try { refreshStatus(); } catch(e) {}
+    try { refreshLog(); } catch(e) {}
+    try { refreshPace(); } catch(e) {}
+    if (currentTab === 'pending') try { refreshPending(); } catch(e) {}
+    if (currentTab === 'campaigns') try { refreshCampaigns(); } catch(e) {}
+    if (currentTab === 'history') try { refreshHistory(); } catch(e) {}
+  }, 15000);
+}
+
+// ─── API HELPERS ─────────────────────────────────────────────────────────
+async function apiFetch(path, options = {}) {
+  try {
+    const res = await fetch(BASE_URL + path, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    console.error('API error', path, e);
+    return null;
+  }
+}
+
+// ─── REFRESH ─────────────────────────────────────────────────────────────
+async function refreshAll() {
+  try {
+    await Promise.all([
+      refreshStatus().catch(()=>{}),
+      refreshCampaigns().catch(()=>{}),
+      refreshPending().catch(()=>{}),
+      refreshLog().catch(()=>{}),
+      refreshPace().catch(()=>{})
+    ]);
+  } catch(e) {}
+  try { renderTab(currentTab); } catch(e) {}
+}
+
+async function refreshPace() {
+  const data = await apiFetch('/api/pace');
+  if (!data || data.erro) return;
+  const container = document.getElementById('pace-alerts-container');
+  if (!container) return;
+  if (!data.alertas || !data.alertas.length) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = data.alertas.map(a => `
+    <div class="alert-banner red" style="margin-bottom:8px;flex-direction:column;align-items:flex-start;gap:4px">
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <i class="ti ti-trending-down" style="font-size:16px;flex-shrink:0"></i>
+        <strong>⚠️ Ritmo baixo: ${esc(a.name)}</strong>
+      </div>
+      <div style="font-size:12px;padding-left:24px">
+        Gastou <strong>R$ ${fmt(a.gasto_hoje)}</strong> de <strong>R$ ${fmt(a.meta_ate_agora)}</strong> esperados até agora
+        — <strong>${a.deficit_pct}% abaixo do ritmo</strong>.
+        <br/>
+        👉 <strong>Aumente o lance ~${a.aumento_lance_sugerido}% no Mercado Livre ADS</strong> para atingir o budget diário.
+      </div>
+    </div>
+  `).join('');
+}
+
+
+async function refreshStatus() {
+  const data = await apiFetch('/api/status');
+  if (!data || data.erro) return;
+  statusData = data;
+  updateKPIs(data);
+  updateStatusBar(data);
+  updateGauge(data);
+}
+
+async function refreshCampaigns() {
+  const data = await apiFetch('/api/campaigns');
+  if (!data) return;
+  campaignsData = data;
+  document.getElementById('badge-campaigns').textContent = data.filter(c => c.status === 'active').length;
+  const sub = document.getElementById('camp-sub');
+  if (sub) sub.textContent = `${data.length} campanhas · ${data.filter(c=>c.status==='active').length} ativas · ${data.filter(c=>c.status!=='active').length} pausadas`;
+}
+
+async function refreshPending() {
+  const data = await apiFetch('/api/pending');
+  if (!data) return;
+  pendingData = data;
+  const badge = document.getElementById('badge-pending');
+  if (badge) badge.textContent = data.length;
+  const sub = document.getElementById('pending-sub');
+  if (sub) sub.textContent = `${data.length} ação(ões) aguardando revisão`;
+}
+
+async function refreshLog() {
+  const data = await apiFetch('/api/log');
+  if (!data) return;
+  renderLogData(data);
+}
+
+async function refreshHistory() {
+  const data = await apiFetch('/api/history');
+  if (!data) return;
+  renderHistoryData(data);
+}
+
+async function loadConfig() {
+  const data = await apiFetch('/api/config');
+  if (!data) return;
+  configData = data;
+  document.getElementById('cfg-daily').value = data.DAILY_LIMIT ?? '';
+  document.getElementById('cfg-monthly').value = data.MONTHLY_LIMIT ?? '';
+  document.getElementById('cfg-alert').value = data.ALERT_THRESHOLD ?? '';
+  document.getElementById('cfg-roas').value = data.MIN_ROAS ?? '';
+  document.getElementById('cfg-inc').value = data.MAX_BID_INCREASE ?? '';
+  document.getElementById('cfg-dec').value = data.MAX_BID_DECREASE ?? '';
+}
+
+async function loadMode() {
+  const data = await apiFetch('/api/mode');
+  if (data && data.mode) {
+    currentMode = data.mode;
+    applyModeUI(data.mode);
+  }
+}
+
+// ─── UPDATE UI ────────────────────────────────────────────────────────────
+function updateKPIs(d) {
+  const pct = d.percentual_usado ?? 0;
+  setText('kpi-spent', `R$ ${fmt(d.gasto_hoje)}`);
+  setText('kpi-spent-sub', `Limite: R$ ${fmt(d.limite_diario)}`);
+  setAttr('kpi-spent-bar', 'style', `width:${Math.min(pct,100)}%;`);
+  setText('kpi-spent-pct', `${pct}% de R$ ${fmt(d.limite_diario)}`);
+
+  setText('kpi-roas', `${d.roas_medio ?? 0}×`);
+  setAttr('kpi-roas-bar', 'style', `width:${Math.min((d.roas_medio??0)/8*100,100)}%;background:var(--green)`);
+
+  setText('kpi-clicks', (d.total_clicks ?? 0).toLocaleString('pt-BR'));
+
+  const saldoPct = 100 - pct;
+  setText('kpi-saldo', `R$ ${fmt(d.saldo_restante)}`);
+  setText('kpi-saldo-sub', `${saldoPct.toFixed(1)}% restante`);
+  setAttr('kpi-saldo-bar', 'style', `width:${Math.min(saldoPct,100)}%;background:var(--teal)`);
+
+  setText('kpi-receita', `R$ ${fmt(d.total_receita)}`);
+
+  // Alerta de velocidade
+  const alertEl = document.getElementById('velocity-alert');
+  if (alertEl) {
+    if (d.alerta_velocidade) {
+      alertEl.style.display = 'flex';
+      setText('velocity-alert-msg', `Alerta de velocidade: ritmo atual vai exceder o limite! Projeção: R$ ${fmt(d.projecao_fim_dia)} (${d.percentual_projecao}%)`);
+    } else {
+      alertEl.style.display = 'none';
+    }
+  }
+}
+
+function updateStatusBar(d) {
+  setText('sb-active', `${d.campanhas_ativas ?? '—'} ativas`);
+  setText('sb-interval', `${d.intervalo_minutos ?? '—'} min`);
+  setText('sb-minroas', `${d.min_roas ?? '—'}×`);
+}
+
+function updateGauge(d) {
+  const pct = Math.min(d.percentual_usado ?? 0, 100);
+  // Arco completo = 251.3px. offset = 251.3 * (1 - pct/100)
+  const offset = 251.3 * (1 - pct / 100);
+  const fill = document.getElementById('gauge-fill');
+  if (fill) fill.setAttribute('stroke-dashoffset', offset.toFixed(1));
+  setText('gauge-pct-text', `${pct}%`);
+  setText('gauge-sub-text', `R$ ${fmt(d.gasto_hoje)} / R$ ${fmt(d.limite_diario)}`);
+  setText('g-saldo', `R$ ${fmt(d.saldo_restante)}`);
+  setText('g-projecao', `R$ ${fmt(d.projecao_fim_dia)}`);
+  // Estimativa mensal simples: gasto hoje * 30
+  setText('g-mensal', `R$ ${fmt((d.gasto_hoje ?? 0) * 30)}`);
+  const badge = document.getElementById('gauge-badge');
+  if (badge) {
+    badge.textContent = `${pct}%`;
+    badge.className = pct >= 90 ? 'badge badge-red' : pct >= 70 ? 'badge badge-yellow' : 'badge badge-green';
+  }
+}
+
+// ─── RENDER TABS ──────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+  const el = document.getElementById('tab-' + name);
+  if (el) el.style.display = '';
+  document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+  // Ativa o botão correto
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    if (btn.textContent.trim().toLowerCase().includes(name.toLowerCase().substring(0, 4))) {
+      btn.classList.add('active');
+    }
+  });
+  currentTab = name;
+  renderTab(name);
+}
+
+function renderTab(name) {
+  if (name === 'overview') renderOverview();
+  if (name === 'campaigns') renderAllCampaigns();
+  if (name === 'pending') renderPending();
+  if (name === 'log') refreshLog();
+  if (name === 'config') loadConfig();
+  if (name === 'history') refreshHistory();
+  if (name === 'scheduler') renderScheduler();
+}
+
+function renderOverview() {
+  const tbody = document.getElementById('quick-campaigns');
+  if (!tbody) return;
+  const active = campaignsData.filter(c => c.status === 'active').slice(0, 6);
+  if (!active.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--muted)">Nenhuma campanha ativa encontrada</td></tr>';
+    return;
+  }
+  tbody.innerHTML = active.map(c => `
+    <tr>
+      <td><div class="camp-name">${esc(c.name)}</div><div class="camp-id">#${c.id}</div></td>
+      <td><span class="badge ${c.status==='active'?'badge-green':'badge-red'}"><span class="badge-dot"></span> ${c.status==='active'?'ativo':'pausado'}</span></td>
+      <td class="text-right mono">R$ ${fmt(c.budget)}</td>
+      <td class="text-right mono" style="color:var(--accent)">R$ ${fmt(c.cost)}</td>
+      <td class="text-right"><span style="color:${roasColor(c.roas)};font-family:var(--mono);font-weight:600">${c.roas}×</span></td>
+      <td class="text-right mono">${(c.clicks||0).toLocaleString('pt-BR')}</td>
+      <td class="text-right mono">${((c.ctr||0)*100).toFixed(2)}%</td>
+      <td>${actionBadge(c.lastAction)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderAllCampaigns() {
+  const tbody = document.getElementById('all-campaigns');
+  if (!tbody) return;
+  if (!campaignsData.length) {
+    tbody.innerHTML = '<tr><td colspan="11" style="padding:20px;text-align:center;color:var(--muted)">Nenhuma campanha encontrada</td></tr>';
+    return;
+  }
+  tbody.innerHTML = campaignsData.map(c => `
+    <tr>
+      <td><div class="camp-name">${esc(c.name)}</div><div class="camp-id">#${c.id}</div></td>
+      <td><span class="badge ${c.status==='active'?'badge-green':'badge-red'}"><span class="badge-dot"></span> ${c.status==='active'?'ativo':'pausado'}</span></td>
+      <td class="text-right mono">R$ ${fmt(c.budget)}</td>
+      <td class="text-right mono" style="color:var(--accent)">R$ ${fmt(c.cost)}</td>
+      <td class="text-right"><div style="color:${roasColor(c.roas)};font-family:var(--mono);font-weight:600">${c.roas}×</div></td>
+      <td class="text-right mono">${(c.clicks||0).toLocaleString('pt-BR')}</td>
+      <td class="text-right mono">R$ ${(c.cpc||0).toFixed(3)}</td>
+      <td class="text-right mono">${((c.ctr||0)*100).toFixed(2)}%</td>
+      <td class="text-right mono">${((c.cvr||0)*100).toFixed(2)}%</td>
+      <td>${actionBadge(c.lastAction)}</td>
+      <td>
+        <div class="action-row">
+          <button class="act-btn approve" title="Aumentar budget" onclick="quickAction(${c.id},'increase')"><i class="ti ti-arrow-up"></i></button>
+          <button class="act-btn reject" title="Reduzir budget" onclick="quickAction(${c.id},'decrease')"><i class="ti ti-arrow-down"></i></button>
+          <button class="act-btn" title="${c.status==='active'?'Pausar':'Ativar'}" onclick="quickAction(${c.id},'${c.status==='active'?'pause':'activate'}')">
+            <i class="ti ${c.status==='active'?'ti-player-pause':'ti-player-play'}"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderPending() {
+  const list = document.getElementById('pending-list');
+  if (!list) return;
+  const banner = document.getElementById('pending-mode-banner');
+  if (banner) banner.style.display = currentMode === 'semi' ? 'flex' : 'none';
+
+  if (!pendingData.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><i class="ti ti-check" style="font-size:32px;display:block;margin-bottom:8px"></i>Nenhuma aprovação pendente</div>';
+    return;
+  }
+  list.innerHTML = pendingData.map(p => {
+    const urgClass = p.urgency==='critical'?'badge-red':p.urgency==='high'?'badge-orange':'badge-blue';
+    const urgLabel = p.urgency==='critical'?'crítico':p.urgency==='high'?'alta':'normal';
+    const isBudget = p.action==='increase_budget'||p.action==='reduce_budget';
+    return `
+      <div class="approval-card" id="approval-${p.id}">
+        <div class="approval-header">
+          <div class="approval-name">${esc(p.name)} <span style="color:var(--hint);font-size:11px;font-family:var(--mono)">#${p.campaignId}</span></div>
+          <span class="badge ${urgClass}">${urgLabel}</span>
+        </div>
+        <div class="approval-action">
+          ${actionBadge(p.action)}
+          ${isBudget?`<span style="font-family:var(--mono);font-size:12px;margin-left:8px">R$ ${fmt(p.currentBudget)} → <strong style="color:${p.action==='increase_budget'?'var(--green)':'var(--red)'}">R$ ${fmt(p.newBudget)}</strong></span>`:''}
+          <span style="font-family:var(--mono);font-size:11px;color:var(--hint);margin-left:8px">ROAS: <span style="color:${roasColor(p.roas)}">${p.roas}×</span></span>
+        </div>
+        <div class="approval-reason">"${esc(p.reason)}"</div>
+        <div class="approval-btns">
+          <button class="btn-approve" onclick="approveAction('${p.id}')"><i class="ti ti-check"></i> Aprovar</button>
+          <button class="btn-reject" onclick="rejectAction('${p.id}')"><i class="ti ti-x"></i> Rejeitar</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderLogData(entries) {
+  const list = document.getElementById('log-list');
+  if (!list) return;
+  const actionColors = {
+    'INÍCIO':'var(--blue)','FIM':'var(--muted)','DADOS':'var(--hint)',
+    'IA':'var(--purple)','AUMENTADO':'var(--green)','REDUZIDO':'var(--red)',
+    'MANTIDA':'var(--blue)','ALERTA':'var(--yellow)','ERRO':'var(--red)',
+    'ALERTA VELOCIDADE':'var(--yellow)','LIMITE ATINGIDO':'var(--red)',
+    'PAUSADA':'var(--red)','BUDGET MÍNIMO':'var(--yellow)',
+    'PENDENTE':'var(--yellow)','SUGESTÃO':'var(--purple)',
+    'REJEITADO':'var(--red)','MODO':'var(--hint)','ATIVADA':'var(--green)',
+    'INCREASE_BUDGET':'var(--green)','REDUCE_BUDGET':'var(--red)',
+  };
+  if (!entries.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Log vazio — rode o agente para ver atividade.</div>';
+    return;
+  }
+  list.innerHTML = [...entries].reverse().map(e => `
+    <div class="log-item">
+      <span class="log-time">${e.time||''}</span>
+      <span class="log-action"><span style="color:${actionColors[e.action]||'var(--accent)'};font-size:11px;font-family:var(--mono)">${esc(e.action||'')}</span></span>
+      <span class="log-msg">${esc(e.message||'')}</span>
+    </div>
+  `).join('');
+  // Auto-scroll
+  const container = document.getElementById('log-container');
+  if (container) container.scrollTop = 0;
+}
+
+function renderHistoryData(hist) {
+  const tbody = document.getElementById('history-table');
+  if (!tbody) return;
+  if (!hist.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--muted)">Nenhum histórico encontrado.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = hist.map(h => `
+    <tr>
+      <td class="mono text-muted">${h.timestamp||h.time||''}</td>
+      <td><div class="camp-name">${esc(h.campaign_name||'')}</div></td>
+      <td>${actionBadge(h.action)}</td>
+      <td class="mono text-right">—</td>
+      <td style="font-size:12px;color:var(--muted);max-width:240px">${esc(h.reason||'')}</td>
+      <td class="mono text-right" style="color:${roasColor(h.metrics_before?.roas||0)}">${h.metrics_before?.roas||'—'}×</td>
+    </tr>
+  `).join('');
+}
+
+function renderScheduler() {
+  const list = document.getElementById('schedule-list');
+  if (!list) return;
+  const interval = statusData.intervalo_minutos || 120;
+  const now = new Date();
+  const times = [];
+  for (let i = 1; i <= 6; i++) {
+    const t = new Date(now.getTime() + i * interval * 60000);
+    times.push(t.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}));
+  }
+  list.innerHTML = times.map((t, i) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="width:36px;height:36px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="ti ti-clock" style="color:var(--accent)"></i>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:500">Execução #${i+1}</div>
+        <div class="mono" style="font-size:12px;color:var(--muted)">${t} hoje</div>
+      </div>
+      <div style="margin-left:auto">${i===0?'<span class="badge badge-green pulse">próximo</span>':'<span class="badge" style="background:var(--surface2);color:var(--hint)">agendado</span>'}</div>
+    </div>
+  `).join('');
+}
+
+// ─── ACTIONS ─────────────────────────────────────────────────────────────
+async function runAgentNow() {
+  showToast('success', '🤖 Agente iniciado...');
+  const btn = event?.currentTarget;
+  if (btn) btn.disabled = true;
+  const res = await apiFetch('/api/rodar-agora', { method: 'POST' });
+  if (btn) btn.disabled = false;
+  if (res) {
+    showToast('success', 'Agente executado com sucesso!');
+    await refreshAll();
+  } else {
+    showToast('error', 'Falha ao executar o agente.');
+  }
+}
+
+async function setMode(mode) {
+  const res = await apiFetch('/api/mode', { method: 'POST', body: JSON.stringify({ mode }) });
+  if (res && res.status === 'ok') {
+    currentMode = mode;
+    applyModeUI(mode);
+    const labels = { auto: 'Autônomo', semi: 'Supervisionado', manual: 'Manual' };
+    showToast('success', `Modo alterado para: ${labels[mode]}`);
+  } else {
+    showToast('error', 'Falha ao alterar modo.');
+  }
+}
+
+function applyModeUI(mode) {
+  ['auto','semi','manual'].forEach(m => {
+    const btn = document.getElementById('mode-' + m);
+    const dot = document.getElementById('dot-' + m);
+    if (!btn || !dot) return;
+    btn.className = 'mode-btn';
+    dot.className = 'mode-dot mode-dot-off';
+    if (m === mode) {
+      btn.classList.add('active-' + m);
+      dot.className = 'mode-dot';
+    }
+  });
+  const labels = { auto: 'Autônomo', semi: 'Supervisionado', manual: 'Manual' };
+  const colors = { auto: 'var(--green)', semi: 'var(--yellow)', manual: 'var(--red)' };
+  setText('mode-display', labels[mode]);
+  const md = document.getElementById('mode-display');
+  if (md) md.style.color = colors[mode];
+}
+
+async function approveAction(id) {
+  const el = document.getElementById('approval-' + id);
+  if (el) { el.style.opacity = '0.5'; el.style.pointerEvents = 'none'; }
+  const res = await apiFetch(`/api/pending/approve/${id}`, { method: 'POST' });
+  if (res && res.status === 'ok') {
+    showToast('success', 'Ação aprovada e executada!');
+    setTimeout(() => el?.remove(), 400);
+    await refreshPending();
+  } else {
+    showToast('error', 'Falha ao aprovar ação.');
+    if (el) { el.style.opacity = '1'; el.style.pointerEvents = ''; }
+  }
+}
+
+async function rejectAction(id) {
+  const el = document.getElementById('approval-' + id);
+  if (el) { el.style.opacity = '0.5'; el.style.pointerEvents = 'none'; }
+  const res = await apiFetch(`/api/pending/reject/${id}`, { method: 'POST' });
+  if (res) {
+    showToast('warning', 'Ação rejeitada.');
+    setTimeout(() => el?.remove(), 400);
+    await refreshPending();
+  }
+}
+
+async function approveAll() {
+  const res = await apiFetch('/api/pending/approve-all', { method: 'POST' });
+  if (res) {
+    showToast('success', 'Todas as ações aprovadas!');
+    pendingData = [];
+    renderPending();
+    document.getElementById('badge-pending').textContent = '0';
+  }
+}
+
+async function rejectAll() {
+  const res = await apiFetch('/api/pending/reject-all', { method: 'POST' });
+  if (res) {
+    showToast('warning', 'Todas as ações rejeitadas.');
+    pendingData = [];
+    renderPending();
+    document.getElementById('badge-pending').textContent = '0';
+  }
+}
+
+async function quickAction(id, type) {
+  const labels = { increase: 'Budget aumentado', decrease: 'Budget reduzido', pause: 'Campanha pausada', activate: 'Campanha ativada' };
+  const res = await apiFetch(`/api/campaign/${id}/action`, { method: 'POST', body: JSON.stringify({ action: type }) });
+  if (res && res.status === 'ok') {
+    showToast(type === 'increase' || type === 'activate' ? 'success' : 'warning', `${labels[type]}: campanha #${id}`);
+    await refreshCampaigns();
+    renderTab(currentTab);
+  } else {
+    showToast('error', `Erro ao executar ação em #${id}`);
+  }
+}
+
+async function saveConfig() {
+  const data = {
+    DAILY_LIMIT: parseFloat(document.getElementById('cfg-daily').value),
+    MONTHLY_LIMIT: parseFloat(document.getElementById('cfg-monthly').value),
+    ALERT_THRESHOLD: parseFloat(document.getElementById('cfg-alert').value),
+    MIN_ROAS: parseFloat(document.getElementById('cfg-roas').value),
+  };
+  const res = await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(data) });
+  if (res && res.status === 'ok') {
+    showToast('success', 'Configurações salvas com sucesso!');
+    await refreshStatus();
+  } else {
+    showToast('error', 'Falha ao salvar configurações.');
+  }
+}
+
+// ─── CHART ───────────────────────────────────────────────────────────────
+function initChart() {
+  const ctx = document.getElementById('mainChart');
+  if (!ctx) return;
+  const labels = ['06h','07h','08h','09h','10h','11h','12h','13h','14h','15h','16h'];
+  mainChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Gasto (R$)', data: Array(labels.length).fill(0), borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.07)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#f97316', yAxisID: 'y1' },
+        { label: 'ROAS', data: Array(labels.length).fill(0), borderColor: '#22c55e', backgroundColor: 'transparent', tension: 0.4, borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#22c55e', borderDash: [4,3], yAxisID: 'y2' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8892a4', font: { family: "'IBM Plex Mono', monospace", size: 11 } } },
+        y1: { position: 'left', grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8892a4', font: { family: "'IBM Plex Mono', monospace", size: 11 }, callback: v => 'R$' + v } },
+        y2: { position: 'right', grid: { display: false }, ticks: { color: '#22c55e', font: { family: "'IBM Plex Mono', monospace", size: 11 }, callback: v => v + '×' } }
+      }
+    }
+  });
+  // Popula com dados de campanhas se disponível
+  updateChartFromCampaigns();
+}
+
+function updateChartFromCampaigns() {
+  if (!mainChart || !campaignsData.length) return;
+  const total = campaignsData.reduce((s, c) => s + (c.cost || 0), 0);
+  const roas = campaignsData.filter(c => c.roas > 0).reduce((s, c) => s + c.roas, 0) / (campaignsData.filter(c=>c.roas>0).length || 1);
+  // Simula uma curva de gasto ao longo do dia baseada no total atual
+  const hour = new Date().getHours();
+  const labels = [];
+  const gastoData = [];
+  const roasData = [];
+  for (let h = 6; h <= Math.min(hour, 23); h++) {
+    labels.push(`${h.toString().padStart(2,'0')}h`);
+    gastoData.push(Math.round(total * (h - 5) / Math.max(hour - 5, 1)));
+    roasData.push(parseFloat((roas * (0.8 + Math.random() * 0.4)).toFixed(2)));
+  }
+  mainChart.data.labels = labels;
+  mainChart.data.datasets[0].data = gastoData;
+  mainChart.data.datasets[1].data = roasData;
+  mainChart.update('none');
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────
+function fmt(n) { return n != null ? parseFloat(n).toFixed(2).replace('.', ',') : '0,00'; }
+function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function setAttr(id, attr, val) { const el = document.getElementById(id); if (el) el.setAttribute(attr, val); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function roasColor(r) {
+  if (r >= 5) return 'var(--green)'; if (r >= 3.5) return 'var(--teal)';
+  if (r >= 2) return 'var(--blue)'; if (r >= 1) return 'var(--yellow)'; return 'var(--red)';
+}
+function actionBadge(action) {
+  const map = {
+    'increase_budget': '<span class="badge badge-green">📈 aumentar</span>',
+    'reduce_budget': '<span class="badge badge-red">📉 reduzir</span>',
+    'keep': '<span class="badge badge-blue">= manter</span>',
+    'pause': '<span class="badge badge-red">⏸ pausar</span>',
+    'INCREASE_BUDGET': '<span class="badge badge-green">📈 aumentar</span>',
+    'REDUCE_BUDGET': '<span class="badge badge-red">📉 reduzir</span>',
+  };
+  return map[action] || '<span class="badge" style="background:var(--surface2);color:var(--hint)">—</span>';
+}
+
+function showToast(type, msg) {
+  const container = document.getElementById('toast-container');
+  const icons = { success: 'ti-check', warning: 'ti-alert-triangle', error: 'ti-x' };
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<i class="ti ${icons[type]||icons.success}" style="font-size:16px;flex-shrink:0"></i><span>${esc(msg)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+function updateTime() {
+  const now = new Date();
+  setText('live-time', now.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+  setText('live-date', now.toLocaleDateString('pt-BR', {weekday:'long',day:'numeric',month:'long',year:'numeric'}));
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────
+window.addEventListener('load', async () => {
+  setInterval(updateTime, 1000);
+  updateTime();
+  initChart();
+  try { await loadMode(); } catch(e) { console.warn('loadMode failed', e); }
+  try { startPolling(); } catch(e) { console.warn('startPolling failed', e); }
+});
+</script>
+</body>
+</html>
